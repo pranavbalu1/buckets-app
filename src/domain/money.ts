@@ -7,6 +7,18 @@ export function parseDollars(input: string): number | null {
   return Number.isSafeInteger(cents) ? cents : null
 }
 
+/** Like parseDollars, but allows a leading + or -. Returns null if invalid or zero. */
+export function parseSignedDollars(input: string): number | null {
+  const s = input.trim()
+  const negative = s.startsWith('-')
+  const cents = parseDollars(s.replace(/^[+-]/, ''))
+  if (cents === null || cents === 0) return null
+  return negative ? -cents : cents
+}
+
+/** Cents as an editable number like "12.50" (no currency symbol). */
+export const centsToInput = (cents: number): string => (cents / 100).toFixed(2)
+
 /** Display only. Never use the result for math. */
 export function formatCents(cents: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100)

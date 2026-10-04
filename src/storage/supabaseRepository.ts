@@ -73,10 +73,28 @@ export const supabaseRepository: LedgerRepository = {
     return parseGroup(data)
   },
 
-  async createBucket({ name, kind, groupId, sortOrder }) {
+  async updateGroup(id, patch) {
+    const { data, error } = await supabase
+      .from('bucket_groups')
+      .update({ name: patch.name, updated_at: now() })
+      .eq('id', id)
+      .select()
+      .single()
+    if (error) fail(error)
+    return parseGroup(data)
+  },
+
+  async createBucket({ name, kind, groupId, sortOrder, monthlyTargetCents, color }) {
     const { data, error } = await supabase
       .from('buckets')
-      .insert({ name, kind, group_id: groupId, sort_order: sortOrder })
+      .insert({
+        name,
+        kind,
+        group_id: groupId,
+        sort_order: sortOrder,
+        monthly_target_cents: monthlyTargetCents,
+        color,
+      })
       .select()
       .single()
     if (error) fail(error)
@@ -90,6 +108,8 @@ export const supabaseRepository: LedgerRepository = {
     if (patch.groupId !== undefined) row.group_id = patch.groupId
     if (patch.archived !== undefined) row.archived = patch.archived
     if (patch.sortOrder !== undefined) row.sort_order = patch.sortOrder
+    if (patch.monthlyTargetCents !== undefined) row.monthly_target_cents = patch.monthlyTargetCents
+    if (patch.color !== undefined) row.color = patch.color
     const { data, error } = await supabase.from('buckets').update(row).eq('id', id).select().single()
     if (error) fail(error)
     return parseBucket(data)
@@ -99,6 +119,13 @@ export const supabaseRepository: LedgerRepository = {
     const { data, error } = await supabase.from('ledger_events').insert(eventToRow(event)).select().single()
     if (error) fail(error)
     return parseEvent(data)
+  },
+
+  async createEvents(events) {
+    if (events.length === 0) return []
+    const { data, error } = await supabase.from('ledger_events').insert(events.map(eventToRow)).select()
+    if (error) fail(error)
+    return data.map(parseEvent)
   },
 
   async updateEvent(id, event) {

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import Field from '../components/Field'
 import { supabase } from '../lib/supabase'
 
 export default function Login() {
@@ -17,16 +18,25 @@ export default function Login() {
   }
 
   return (
-    <form onSubmit={submit} className="mx-auto mt-24 flex max-w-sm flex-col gap-3 p-4">
-      <h1 className="text-2xl font-bold">Buckets</h1>
-      <input className="rounded border p-2" type="email" placeholder="Email" autoComplete="email"
-        value={email} onChange={(e) => setEmail(e.target.value)} />
-      <input className="rounded border p-2" type="password" placeholder="Password"
-        autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} />
-      <button disabled={busy} className="rounded bg-black p-2 text-white disabled:opacity-50">
-        {busy ? 'Signing in...' : 'Log in'}
-      </button>
-      {error && <p className="text-red-600">{error}</p>}
-    </form>
+    <div className="grid min-h-screen place-items-center p-4">
+      <form onSubmit={submit} className="card flex w-full max-w-sm flex-col gap-4 p-6">
+        <div className="flex items-center gap-2">
+          <div className="grid h-9 w-9 place-items-center rounded-lg bg-accent font-bold text-accent-ink">B</div>
+          <h1 className="text-xl font-semibold">Buckets</h1>
+        </div>
+        <Field label="Email">
+          <input className="input" type="email" autoComplete="email" value={email}
+            onChange={(e) => setEmail(e.target.value)} />
+        </Field>
+        <Field label="Password">
+          <input className="input" type="password" autoComplete="current-password" value={password}
+            onChange={(e) => setPassword(e.target.value)} />
+        </Field>
+        <button disabled={busy} className="btn btn-primary">
+          {busy ? 'Signing in…' : 'Log in'}
+        </button>
+        {error && <p className="text-sm text-bad">{error}</p>}
+      </form>
+    </div>
   )
 }

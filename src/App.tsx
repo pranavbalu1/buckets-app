@@ -2,18 +2,21 @@ import { useEffect, useState } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from './lib/supabase'
 import { useLedger } from './storage/store'
+import type { AddKind, Tab } from './nav'
+import Modal from './components/Modal'
+import Sidebar from './components/Sidebar'
 import Login from './features/Login'
 import Dashboard from './features/Dashboard'
-import Buckets from './features/Buckets'
+import Budget from './features/Budget'
+import Transactions from './features/Transactions'
 import Accounts from './features/Accounts'
-
-const TABS = ['Dashboard', 'Budget', 'Transactions', 'Analytics', 'Accounts'] as const
-type Tab = (typeof TABS)[number]
+import QuickAdd from './features/QuickAdd'
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null)
   const [authReady, setAuthReady] = useState(false)
-  const [tab, setTab] = useState<Tab>('Dashboard')
+  const [tab, setTab] = useState<Tab>('Budget')
+  const [addKind, setAddKind] = useState<AddKind | null>(null)
   const { status, error, load, reset, clearError } = useLedger()
 
   useEffect(() => {
@@ -31,42 +34,62 @@ export default function App() {
     else reset()
   }, [userId, load, reset])
 
+  // Press "n" anywhere (outside a text field) to add a transaction.
+  useEffect(() => {
+    if (!userId) return
+    function onKey(e: KeyboardEvent) {
+      const el = e.target as HTMLElement
+      const typing = ['INPUT', 'SELECT', 'TEXTAREA'].includes(el.tagName)
+      if (e.key === 'n' && !typing && !e.metaKey && !e.ctrlKey && !e.altKey) {
+        setAddKind((k) => k ?? 'expense')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [userId])
+
   if (!authReady) return null
   if (!session) return <Login />
 
   return (
-    <div className="mx-auto max-w-4xl p-4">
-      <header className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Buckets</h1>
-        <button className="text-sm underline" onClick={() => supabase.auth.signOut()}>Log out</button>
-      </header>
+    <div className="min-h-screen md:flex">
+      <Sidebar
+        tab={tab}
+        onNavigate={setTab}
+        onAdd={() => setAddKind('expense')}
+        onLogout={() => supabase.auth.signOut()}
+      />
 
-      <nav className="mb-6 flex flex-wrap gap-1 border-b">
-        {TABS.map((t) => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-3 py-2 ${tab === t ? 'border-b-2 border-black font-semibold' : 'text-gray-500'}`}>
-            {t}
-          </button>
-        ))}
-      </nav>
+      <main className="min-w-0 flex-1 p-4 md:p-6">
+        <div className="mx-auto max-w-6xl">
+          {tab !== 'Budget' && <h1 className="mb-6 text-2xl font-semibold">{tab}</h1>}
 
-      {error && (
-        <div className="mb-4 flex items-center justify-between rounded border border-red-300 bg-red-50 p-3 text-red-700">
-          <span>{error}</span>
-          <button className="underline" onClick={clearError}>Dismiss</button>
-        </div>
-      )}
-
-      {status === 'loading' && <p>Loading...</p>}
-      {status === 'ready' && (
-        <>
-          {tab === 'Dashboard' && <Dashboard />}
-          {tab === 'Budget' && <Buckets />}
-          {tab === 'Accounts' && <Accounts />}
-          {(tab === 'Transactions' || tab === 'Analytics') && (
-            <p className="text-gray-500">{tab} is coming soon.</p>
+          {error && (
+            <div className="mb-4 flex items-center justify-between rounded-lg border border-bad/30 bg-bad-soft p-3 text-sm text-bad">
+              <span>{error}</span>
+              <button className="underline" onClick={clearError}>
+                Dismiss
+              </button>
+            </div>
           )}
-        </>
+
+          {status === 'loading' && <p className="text-muted">Loading…</p>}
+          {status === 'ready' && (
+            <>
+              {tab === 'Dashboard' && <Dashboard onAdd={setAddKind} onNavigate={setTab} />}
+              {tab === 'Budget' && <Budget />}
+              {tab === 'Transactions' && <Transactions />}
+              {tab === 'Accounts' && <Accounts />}
+              {tab === 'Analytics' && <p className="text-muted">Analytics is coming soon.</p>}
+            </>
+          )}
+        </div>
+      </main>
+
+      {addKind && (
+        <Modal title="Add transaction" onClose={() => setAddKind(null)}>
+          <QuickAdd key={addKind} initialKind={addKind} onDone={() => setAddKind(null)} />
+        </Modal>
       )}
     </div>
   )

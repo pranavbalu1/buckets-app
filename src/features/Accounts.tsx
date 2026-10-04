@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
+import Money from '../components/Money'
 import { computeBalances } from '../domain/balances'
-import { formatCents } from '../domain/money'
+import { ACCOUNT_TYPES, ACCOUNT_TYPE_LABELS } from '../domain/models'
 import type { Account, AccountType } from '../domain/models'
 import { useLedger } from '../storage/store'
-import { ACCOUNT_TYPES, ACCOUNT_TYPE_LABELS } from '../domain/models'
 
 export default function Accounts() {
   const { accounts, events, addAccount } = useLedger()
@@ -13,37 +13,42 @@ export default function Accounts() {
   const [showArchived, setShowArchived] = useState(false)
 
   const visible = accounts.filter((a) => showArchived || !a.archived)
+  const total = accounts
+    .filter((a) => !a.archived)
+    .reduce((sum, a) => sum + (balances.accounts[a.id] ?? 0), 0)
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     const trimmed = name.trim()
     if (!trimmed) return
-    await addAccount(trimmed, type)
-    setName('')
+    if (await addAccount(trimmed, type)) setName('')
   }
 
   return (
-    <div className="space-y-4">
-      <h2 className="text-xl font-semibold">Accounts</h2>
+    <div className="space-y-6">
+      <div className="card p-5">
+        <div className="text-sm text-muted">Total across accounts</div>
+        <div className="text-3xl font-semibold"><Money cents={total} /></div>
+      </div>
 
       <form onSubmit={submit} className="flex flex-wrap gap-2">
-        <input className="min-w-40 flex-1 rounded border p-2" placeholder="New account name"
+        <input aria-label="New account name" className="input min-w-40 flex-1" placeholder="New account name"
           value={name} onChange={(e) => setName(e.target.value)} />
-        <select aria-label="Account type"   className="rounded border p-2" value={type}
+        <select aria-label="Account type" className="input w-auto" value={type}
           onChange={(e) => setType(e.target.value as AccountType)}>
           {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{ACCOUNT_TYPE_LABELS[t]}</option>)}
         </select>
-        <button className="rounded bg-black px-4 py-2 text-white">Add</button>
+        <button className="btn btn-primary">Add account</button>
       </form>
 
-      <ul className="divide-y rounded border">
-        {visible.length === 0 && <li className="p-3 text-gray-500">No accounts yet.</li>}
+      <ul className="card divide-y divide-line">
+        {visible.length === 0 && <li className="p-4 text-muted">No accounts yet.</li>}
         {visible.map((a) => (
           <AccountRow key={a.id} account={a} balance={balances.accounts[a.id] ?? 0} />
         ))}
       </ul>
 
-      <label className="flex items-center gap-2 text-sm">
+      <label className="flex items-center gap-2 text-sm text-muted">
         <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
         Show archived
       </label>
@@ -63,20 +68,20 @@ function AccountRow({ account, balance }: { account: Account; balance: number })
   }
 
   return (
-    <li className={`flex items-center gap-3 p-3 ${account.archived ? 'opacity-50' : ''}`}>
-      <div className="flex-1">
+    <li className={`flex flex-wrap items-center gap-3 p-4 ${account.archived ? 'opacity-50' : ''}`}>
+      <div className="min-w-0 flex-1">
         {editing ? (
-          <input aria-label="Rename account" autoFocus className="rounded border p-1" value={name}
+          <input aria-label="Rename account" autoFocus className="input py-1" value={name}
             onChange={(e) => setName(e.target.value)} onBlur={save}
             onKeyDown={(e) => e.key === 'Enter' && save()} />
         ) : (
-          <div className="font-medium">{account.name}</div>
+          <div className="truncate font-medium">{account.name}</div>
         )}
-        <div className="text-sm text-gray-500">{ACCOUNT_TYPE_LABELS[account.type]}</div>
+        <div className="text-sm text-muted">{ACCOUNT_TYPE_LABELS[account.type]}</div>
       </div>
-      <div className={`tabular-nums ${balance < 0 ? 'text-red-600' : ''}`}>{formatCents(balance)}</div>
-      <button className="text-sm underline" onClick={() => setEditing(true)}>Rename</button>
-      <button className="text-sm underline"
+      <div className="text-lg font-semibold"><Money cents={balance} /></div>
+      <button className="btn-link" onClick={() => setEditing(true)}>Rename</button>
+      <button className="btn-link"
         onClick={() => updateAccount(account.id, { archived: !account.archived })}>
         {account.archived ? 'Restore' : 'Archive'}
       </button>

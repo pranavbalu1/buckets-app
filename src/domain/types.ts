@@ -25,3 +25,6 @@ export interface LedgerEvent {
   payee: string | null
   notes: string | null
 }
+
+/** A ledger event before the database assigns it an id. */
+export type DraftEvent = Omit<LedgerEvent, 'id'>

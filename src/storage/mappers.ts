@@ -27,6 +27,8 @@ const bucketRow = z.object({
   kind: z.enum(BUCKET_KINDS),
   sort_order: z.number().int(),
   archived: z.boolean(),
+  monthly_target_cents: z.number().int(),
+  color: z.string().nullable(),
 })
 
 const eventRow = z.object({
@@ -61,6 +63,8 @@ export function parseBucket(row: unknown): Bucket {
     kind: r.kind,
     sortOrder: r.sort_order,
     archived: r.archived,
+    monthlyTargetCents: r.monthly_target_cents,
+    color: r.color,
   }
 }
 

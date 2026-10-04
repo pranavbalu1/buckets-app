@@ -23,8 +23,12 @@ describe('mappers', () => {
   it('converts bucket column names', () => {
     const b = parseBucket({
       id: 'b', group_id: 'g', name: 'Gas', kind: 'spending', sort_order: 3, archived: false,
+      monthly_target_cents: 5000, color: '#3b82f6',
     })
-    expect(b).toEqual({ id: 'b', groupId: 'g', name: 'Gas', kind: 'spending', sortOrder: 3, archived: false })
+    expect(b).toEqual({
+      id: 'b', groupId: 'g', name: 'Gas', kind: 'spending', sortOrder: 3, archived: false,
+      monthlyTargetCents: 5000, color: '#3b82f6',
+    })
   })
 
   it('rejects rows with an unknown event type', () => {

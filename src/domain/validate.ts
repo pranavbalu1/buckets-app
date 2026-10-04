@@ -1,7 +1,7 @@
-import type { LedgerEvent } from './types'
+import type { DraftEvent } from './types'
 
 /** Mirrors the database constraint. Returns an error message, or null if valid. */
-export function validateEvent(e: LedgerEvent): string | null {
+export function validateEvent(e: DraftEvent): string | null {
   if (!Number.isInteger(e.amountCents) || e.amountCents <= 0) return 'Amount must be a positive whole number of cents'
   if (!/^\d{4}-\d{2}-\d{2}$/.test(e.date)) return 'Date must be YYYY-MM-DD'
   switch (e.type) {

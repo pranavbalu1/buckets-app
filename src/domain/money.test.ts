@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseDollars } from './money'
+import { parseDollars, parseSignedDollars } from './money'
 
 describe('parseDollars', () => {
   it('parses common inputs exactly', () => {
@@ -14,5 +14,19 @@ describe('parseDollars', () => {
     expect(parseDollars('abc')).toBeNull()
     expect(parseDollars('1.234')).toBeNull()
     expect(parseDollars('-5')).toBeNull()
+  })
+})
+
+describe('parseSignedDollars', () => {
+  it('handles in and out', () => {
+    expect(parseSignedDollars('50')).toBe(5000)
+    expect(parseSignedDollars('+50')).toBe(5000)
+    expect(parseSignedDollars('-12.50')).toBe(-1250)
+    expect(parseSignedDollars('-$1,000')).toBe(-100000)
+  })
+  it('rejects zero and junk', () => {
+    expect(parseSignedDollars('0')).toBeNull()
+    expect(parseSignedDollars('-')).toBeNull()
+    expect(parseSignedDollars('abc')).toBeNull()
   })
 })

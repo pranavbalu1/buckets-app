@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { Account, AccountType, Bucket, BucketGroup, BucketKind } from '../domain/models'
 import type { LedgerEvent } from '../domain/types'
 import type { NewEvent } from './mappers'
+import type { BucketPatch } from './repository'
 import { supabaseRepository as repo } from './supabaseRepository'
 
 interface LedgerState {
@@ -16,18 +17,25 @@ interface LedgerState {
   reset: () => void
   clearError: () => void
 
-  addAccount: (name: string, type: AccountType) => Promise<void>
-  updateAccount: (id: string, patch: Partial<Pick<Account, 'name' | 'type' | 'archived'>>) => Promise<void>
-  addGroup: (name: string) => Promise<void>
-  addBucket: (input: { name: string; kind: BucketKind; groupId: string | null }) => Promise<void>
-  updateBucket: (
-    id: string,
-    patch: Partial<Pick<Bucket, 'name' | 'kind' | 'groupId' | 'archived'>>,
-  ) => Promise<void>
+  addAccount: (name: string, type: AccountType) => Promise<boolean>
+  updateAccount: (id: string, patch: Partial<Pick<Account, 'name' | 'type' | 'archived'>>) => Promise<boolean>
 
-  addEvent: (event: NewEvent) => Promise<void>
-  editEvent: (id: string, event: NewEvent) => Promise<void>
-  removeEvent: (id: string) => Promise<void>
+  addGroup: (name: string) => Promise<boolean>
+  updateGroup: (id: string, patch: { name: string }) => Promise<boolean>
+
+  addBucket: (input: {
+    name: string
+    kind: BucketKind
+    groupId: string | null
+    monthlyTargetCents: number
+    color: string | null
+  }) => Promise<boolean>
+  updateBucket: (id: string, patch: BucketPatch) => Promise<boolean>
+
+  addEvent: (event: NewEvent) => Promise<boolean>
+  addEvents: (events: NewEvent[]) => Promise<boolean>
+  editEvent: (id: string, event: NewEvent) => Promise<boolean>
+  removeEvent: (id: string) => Promise<boolean>
 }
 
 const empty = { accounts: [], groups: [], buckets: [], events: [] }
@@ -38,13 +46,15 @@ const byOrder = <T extends { sortOrder: number; name: string }>(a: T, b: T) =>
 const nextOrder = (items: { sortOrder: number }[]) => items.reduce((m, i) => Math.max(m, i.sortOrder), 0) + 1
 
 export const useLedger = create<LedgerState>((set, get) => {
-  /** Runs an action; on failure, stores the error message instead of throwing. */
-  async function run(fn: () => Promise<void>) {
+  /** Runs an action. Returns true on success; on failure stores the error message and returns false. */
+  async function run(fn: () => Promise<void>): Promise<boolean> {
     try {
       await fn()
       set({ error: null })
+      return true
     } catch (e) {
       set({ error: message(e) })
+      return false
     }
   }
 
@@ -82,9 +92,15 @@ export const useLedger = create<LedgerState>((set, get) => {
         set((s) => ({ groups: [...s.groups, g].sort(byOrder) }))
       }),
 
-    addBucket: ({ name, kind, groupId }) =>
+    updateGroup: (id, patch) =>
       run(async () => {
-        const b = await repo.createBucket({ name, kind, groupId, sortOrder: nextOrder(get().buckets) })
+        const g = await repo.updateGroup(id, patch)
+        set((s) => ({ groups: s.groups.map((x) => (x.id === id ? g : x)).sort(byOrder) }))
+      }),
+
+    addBucket: (input) =>
+      run(async () => {
+        const b = await repo.createBucket({ ...input, sortOrder: nextOrder(get().buckets) })
         set((s) => ({ buckets: [...s.buckets, b].sort(byOrder) }))
       }),
 
@@ -98,6 +114,12 @@ export const useLedger = create<LedgerState>((set, get) => {
       run(async () => {
         const e = await repo.createEvent(event)
         set((s) => ({ events: [...s.events, e] }))
+      }),
+
+    addEvents: (events) =>
+      run(async () => {
+        const created = await repo.createEvents(events)
+        set((s) => ({ events: [...s.events, ...created] }))
       }),
 
     editEvent: (id, event) =>
