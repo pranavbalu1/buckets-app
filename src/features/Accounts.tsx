@@ -1,5 +1,23 @@
-import { useMemo, useState } from 'react'
-import Money from '../components/Money'
+import { useMemo, useRef, useState } from 'react'
+import {
+  Archive,
+  ArrowDownToLine,
+  Check,
+  GripVertical,
+  History,
+  Pencil,
+  RotateCcw,
+  WalletCards,
+} from 'lucide-react'
+import QuickAdd from './QuickAdd'
+import { Button } from '../components/ui/button'
+import { Card } from '../components/ui/card'
+import { FormField } from '../components/ui/form-field'
+import { Input } from '../components/ui/input'
+import { Modal } from '../components/ui/modal'
+import { Select } from '../components/ui/select'
+import { formatCents } from '../domain/money'
+import { TYPE_LABELS } from '../domain/describe'
 import { computeBalances } from '../domain/balances'
 import { ACCOUNT_TYPES, ACCOUNT_TYPE_LABELS } from '../domain/models'
 import type { Account, AccountType } from '../domain/models'
@@ -11,80 +29,217 @@ export default function Accounts() {
   const [name, setName] = useState('')
   const [type, setType] = useState<AccountType>('checking')
   const [showArchived, setShowArchived] = useState(false)
+  const [depositOpen, setDepositOpen] = useState(false)
+  const [historyAccount, setHistoryAccount] = useState<Account | null>(null)
+  const [draggedId, setDraggedId] = useState<string | null>(null)
 
-  const visible = accounts.filter((a) => showArchived || !a.archived)
+  const visible = accounts.filter((account) => showArchived || !account.archived)
   const total = accounts
-    .filter((a) => !a.archived)
-    .reduce((sum, a) => sum + (balances.accounts[a.id] ?? 0), 0)
+    .filter((account) => !account.archived)
+    .reduce((sum, account) => sum + (balances.accounts[account.id] ?? 0), 0)
+  const activeCount = accounts.filter((account) => !account.archived).length
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault()
+  async function reorder(sourceId: string, targetId: string) {
+    if (sourceId === targetId) return
+    const ordered = [...accounts].sort((a, b) => a.sortOrder - b.sortOrder)
+    const source = ordered.find((account) => account.id === sourceId)
+    if (!source) return
+    const without = ordered.filter((account) => account.id !== sourceId)
+    const targetIndex = without.findIndex((account) => account.id === targetId)
+    without.splice(targetIndex < 0 ? without.length : targetIndex, 0, source)
+    await Promise.all(without.map((account, index) =>
+      useLedger.getState().updateAccount(account.id, { sortOrder: index }),
+    ))
+  }
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault()
     const trimmed = name.trim()
     if (!trimmed) return
     if (await addAccount(trimmed, type)) setName('')
   }
 
   return (
-    <div className="space-y-6">
-      <div className="card p-5">
-        <div className="text-sm text-muted">Total across accounts</div>
-        <div className="text-3xl font-semibold"><Money cents={total} /></div>
+    <div className="space-y-5 md:space-y-6">
+      <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+        <Card className="relative flex min-h-48 flex-col justify-between overflow-hidden border-zinc-800 bg-gradient-to-br from-[#121214] via-[#161b19] to-[#10202a] p-5 text-white shadow-md sm:p-6">
+          <div className="absolute -right-10 -top-16 size-52 rounded-full border-[30px] border-[#e6ff4b]/[0.08]" aria-hidden />
+          <div className="relative flex items-start justify-between">
+            <div>
+              <p className="text-xs font-medium text-white/70">Total across accounts</p>
+              <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">{formatCents(total)}</h2>
+            </div>
+            <span className="grid size-10 place-items-center rounded-xl bg-white/10"><WalletCards className="size-5" /></span>
+          </div>
+          <div className="relative mt-6 flex items-end justify-between gap-4 border-t border-white/15 pt-4">
+            <div>
+              <p className="text-xs text-white/65">Active accounts</p>
+              <p className="mt-0.5 text-sm font-semibold">{activeCount} {activeCount === 1 ? 'account' : 'accounts'}</p>
+            </div>
+            <Button className="border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={() => setDepositOpen(true)}>
+              <ArrowDownToLine className="size-4" /> Record deposit
+            </Button>
+          </div>
+        </Card>
+
+        <Card className="p-5 sm:p-6">
+          <div className="mb-4">
+            <p className="text-xs font-semibold tracking-[0.13em] text-accent uppercase">Get started</p>
+            <h2 className="mt-1 text-lg font-semibold tracking-tight">Add an account</h2>
+            <p className="mt-1 text-sm text-muted">Track the places where you keep your money.</p>
+          </div>
+          <form onSubmit={submit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <FormField label="Account name" htmlFor="new-account-name" required>
+              <Input id="new-account-name" className="min-w-36" placeholder="e.g. Everyday checking" value={name} onChange={(event) => setName(event.target.value)} />
+            </FormField>
+            <FormField label="Account type" htmlFor="new-account-type">
+              <Select
+                id="new-account-type"
+                value={type}
+                onChange={(event) => setType(event.target.value as AccountType)}
+                options={ACCOUNT_TYPES.map((item) => ({ value: item, label: ACCOUNT_TYPE_LABELS[item] }))}
+                className="h-[42px] rounded-lg border-line bg-surface shadow-none focus-visible:border-accent focus-visible:ring-accent/30"
+              />
+            </FormField>
+            <Button variant="primary" className="shrink-0 sm:mb-0.5"><WalletCards className="size-4" /> Add account</Button>
+          </form>
+        </Card>
       </div>
 
-      <form onSubmit={submit} className="flex flex-wrap gap-2">
-        <input aria-label="New account name" className="input min-w-40 flex-1" placeholder="New account name"
-          value={name} onChange={(e) => setName(e.target.value)} />
-        <select aria-label="Account type" className="input w-auto" value={type}
-          onChange={(e) => setType(e.target.value as AccountType)}>
-          {ACCOUNT_TYPES.map((t) => <option key={t} value={t}>{ACCOUNT_TYPE_LABELS[t]}</option>)}
-        </select>
-        <button className="btn btn-primary">Add account</button>
-      </form>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="font-semibold">Your accounts</h2>
+          <p className="mt-0.5 text-xs text-muted">Drag an account to change its order.</p>
+        </div>
+        <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-xs font-medium text-muted transition hover:text-ink">
+          <input className="accent-accent" type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />
+          Show archived
+        </label>
+      </div>
 
-      <ul className="card divide-y divide-line">
-        {visible.length === 0 && <li className="p-4 text-muted">No accounts yet.</li>}
-        {visible.map((a) => (
-          <AccountRow key={a.id} account={a} balance={balances.accounts[a.id] ?? 0} />
-        ))}
-      </ul>
+      {visible.length === 0 ? (
+        <Card className="flex flex-col items-center px-5 py-12 text-center">
+          <span className="grid size-11 place-items-center rounded-xl bg-sunken text-muted"><WalletCards className="size-5" /></span>
+          <p className="mt-3 font-medium">No accounts to show</p>
+          <p className="mt-1 text-sm text-muted">Add an account above to start tracking balances.</p>
+        </Card>
+      ) : (
+        <ul className="grid gap-3 lg:grid-cols-2">
+          {visible.map((account) => (
+            <AccountRow key={account.id} account={account} balance={balances.accounts[account.id] ?? 0}
+              onHistory={() => setHistoryAccount(account)}
+              onDragStart={() => setDraggedId(account.id)}
+              onDragEnd={() => setDraggedId(null)}
+              onDrop={() => {
+                if (draggedId) void reorder(draggedId, account.id)
+                setDraggedId(null)
+              }} />
+          ))}
+        </ul>
+      )}
 
-      <label className="flex items-center gap-2 text-sm text-muted">
-        <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-        Show archived
-      </label>
+      {depositOpen && (
+        <Modal title="Record a deposit" onClose={() => setDepositOpen(false)}>
+          <QuickAdd initialKind="deposit" onDone={() => setDepositOpen(false)} />
+        </Modal>
+      )}
+
+      {historyAccount && <Modal title={`${historyAccount.name} history`} onClose={() => setHistoryAccount(null)}>
+        <AccountHistory account={historyAccount} />
+      </Modal>}
     </div>
   )
 }
 
-function AccountRow({ account, balance }: { account: Account; balance: number }) {
-  const updateAccount = useLedger((s) => s.updateAccount)
+function AccountRow({ account, balance, onHistory, onDragStart, onDragEnd, onDrop }: {
+  account: Account
+  balance: number
+  onHistory: () => void
+  onDragStart: () => void
+  onDragEnd: () => void
+  onDrop: () => void
+}) {
+  const updateAccount = useLedger((state) => state.updateAccount)
   const [editing, setEditing] = useState(false)
   const [name, setName] = useState(account.name)
+  const [type, setType] = useState<AccountType>(account.type)
+  const saving = useRef(false)
 
   async function save() {
+    if (saving.current) return
+    saving.current = true
     const trimmed = name.trim()
-    if (trimmed && trimmed !== account.name) await updateAccount(account.id, { name: trimmed })
-    setEditing(false)
+    try {
+      if (trimmed && (trimmed !== account.name || type !== account.type)) await updateAccount(account.id, { name: trimmed, type })
+      else { setName(account.name); setType(account.type) }
+      setEditing(false)
+    } finally {
+      saving.current = false
+    }
   }
 
   return (
-    <li className={`flex flex-wrap items-center gap-3 p-4 ${account.archived ? 'opacity-50' : ''}`}>
-      <div className="min-w-0 flex-1">
-        {editing ? (
-          <input aria-label="Rename account" autoFocus className="input py-1" value={name}
-            onChange={(e) => setName(e.target.value)} onBlur={save}
-            onKeyDown={(e) => e.key === 'Enter' && save()} />
-        ) : (
-          <div className="truncate font-medium">{account.name}</div>
-        )}
-        <div className="text-sm text-muted">{ACCOUNT_TYPE_LABELS[account.type]}</div>
-      </div>
-      <div className="text-lg font-semibold"><Money cents={balance} /></div>
-      <button className="btn-link" onClick={() => setEditing(true)}>Rename</button>
-      <button className="btn-link"
-        onClick={() => updateAccount(account.id, { archived: !account.archived })}>
-        {account.archived ? 'Restore' : 'Archive'}
-      </button>
+    <li
+      className={`list-none ${account.archived ? 'opacity-60' : ''}`}
+      draggable
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={onDrop}
+    >
+      <Card className="flex h-full items-center gap-3 p-4 transition hover:border-accent/35 hover:shadow-md sm:gap-4">
+        <GripVertical className="size-4 shrink-0 cursor-grab text-muted/70" aria-label="Drag to reorder" />
+        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent"><WalletCards className="size-[18px]" /></span>
+        <div className="min-w-0 flex-1">
+          {editing ? (
+            <div className="space-y-1">
+              <Input aria-label="Rename account" autoFocus className="h-8 py-1" value={name}
+              onChange={(event) => setName(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') void save()
+                if (event.key === 'Escape') { setName(account.name); setType(account.type); setEditing(false) }
+              }} />
+              <Select aria-label="Account type" value={type}
+                onChange={(event) => setType(event.target.value as AccountType)}
+                options={ACCOUNT_TYPES.map((item) => ({ value: item, label: ACCOUNT_TYPE_LABELS[item] }))}
+                className="h-8 py-1 text-xs" />
+            </div>
+          ) : (
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate text-sm font-semibold">{account.name}</span>
+              {account.archived && <span className="rounded-md bg-sunken px-1.5 py-0.5 text-[10px] font-medium text-muted">Archived</span>}
+            </div>
+          )}
+          {!editing && <div className="mt-0.5 text-xs text-muted">{ACCOUNT_TYPE_LABELS[account.type]}</div>}
+        </div>
+        <div className="shrink-0 text-right">
+          <div className="text-base font-semibold tabular-nums"><span>{formatCents(balance)}</span></div>
+          <div className="text-[10px] text-muted">Current balance</div>
+        </div>
+        <div className="ml-1 flex shrink-0 items-center gap-1 border-l border-line pl-2">
+          <button className="grid size-8 place-items-center rounded-lg text-muted transition hover:bg-sunken hover:text-ink" aria-label={`View ${account.name} history`} title="View account history" onClick={onHistory}>
+            <History className="size-3.5" />
+          </button>
+          <button className="grid size-8 place-items-center rounded-lg text-muted transition hover:bg-sunken hover:text-ink" aria-label={editing ? `Save ${account.name}` : `Rename ${account.name}`} title={editing ? 'Save name' : 'Rename'} onClick={() => editing ? void save() : setEditing(true)}>
+            {editing ? <Check className="size-3.5" /> : <Pencil className="size-3.5" />}
+          </button>
+          <button className="grid size-8 place-items-center rounded-lg text-muted transition hover:bg-sunken hover:text-ink" aria-label={account.archived ? `Restore ${account.name}` : `Archive ${account.name}`} title={account.archived ? 'Restore account' : 'Archive account'} onClick={() => updateAccount(account.id, { archived: !account.archived })}>
+            {account.archived ? <RotateCcw className="size-3.5" /> : <Archive className="size-3.5" />}
+          </button>
+        </div>
+      </Card>
     </li>
   )
+}
+
+function AccountHistory({ account }: { account: Account }) {
+  const events = useLedger((state) => state.events)
+  const relevant = events.filter((event) => event.accountId === account.id || event.toAccountId === account.id)
+    .slice().sort((a, b) => b.date.localeCompare(a.date))
+  return relevant.length ? <ul className="divide-y divide-border/70">
+    {relevant.map((event) => <li key={event.id} className="flex items-center justify-between gap-3 py-3">
+      <span className="min-w-0"><strong className="block truncate text-sm">{event.description || TYPE_LABELS[event.type]}</strong><span className="text-xs text-muted-foreground">{event.date} · {TYPE_LABELS[event.type]}</span></span>
+      <strong className="shrink-0 tabular-nums">{formatCents(event.amountCents)}</strong>
+    </li>)}
+  </ul> : <p className="py-8 text-center text-sm text-muted-foreground">No history for this account yet.</p>
 }

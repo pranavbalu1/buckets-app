@@ -27,7 +27,7 @@ describe('mappers', () => {
     })
     expect(b).toEqual({
       id: 'b', groupId: 'g', name: 'Gas', kind: 'spending', sortOrder: 3, archived: false,
-      monthlyTargetCents: 5000, color: '#3b82f6',
+      monthlyTargetCents: 5000, targetCents: null, targetDate: null, color: '#3b82f6',
     })
   })
 

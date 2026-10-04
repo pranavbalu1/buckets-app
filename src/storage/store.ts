@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { queryClient } from '../lib/queryClient'
 import type { Account, AccountType, Bucket, BucketGroup, BucketKind } from '../domain/models'
 import type { LedgerEvent } from '../domain/types'
 import type { NewEvent } from './mappers'
@@ -18,19 +19,23 @@ interface LedgerState {
   clearError: () => void
 
   addAccount: (name: string, type: AccountType) => Promise<boolean>
-  updateAccount: (id: string, patch: Partial<Pick<Account, 'name' | 'type' | 'archived'>>) => Promise<boolean>
+  updateAccount: (id: string, patch: Partial<Pick<Account, 'name' | 'type' | 'sortOrder' | 'archived'>>) => Promise<boolean>
 
-  addGroup: (name: string) => Promise<boolean>
-  updateGroup: (id: string, patch: { name: string }) => Promise<boolean>
+  addGroup: (name: string, color?: string | null) => Promise<boolean>
+  updateGroup: (id: string, patch: { name?: string; color?: string | null; sortOrder?: number }) => Promise<boolean>
+  removeGroup: (id: string) => Promise<boolean>
 
   addBucket: (input: {
     name: string
     kind: BucketKind
     groupId: string | null
     monthlyTargetCents: number
+    targetCents: number | null
+    targetDate: string | null
     color: string | null
   }) => Promise<boolean>
   updateBucket: (id: string, patch: BucketPatch) => Promise<boolean>
+  removeBucket: (id: string) => Promise<boolean>
 
   addEvent: (event: NewEvent) => Promise<boolean>
   addEvents: (events: NewEvent[]) => Promise<boolean>
@@ -50,6 +55,8 @@ export const useLedger = create<LedgerState>((set, get) => {
   async function run(fn: () => Promise<void>): Promise<boolean> {
     try {
       await fn()
+      const { accounts, groups, buckets, events } = get()
+      queryClient.setQueriesData({ queryKey: ['ledger'] }, { accounts, groups, buckets, events })
       set({ error: null })
       return true
     } catch (e) {
@@ -76,19 +83,19 @@ export const useLedger = create<LedgerState>((set, get) => {
 
     addAccount: (name, type) =>
       run(async () => {
-        const a = await repo.createAccount({ name, type })
-        set((s) => ({ accounts: [...s.accounts, a] }))
+        const a = await repo.createAccount({ name, type, sortOrder: nextOrder(get().accounts) })
+        set((s) => ({ accounts: [...s.accounts, a].sort(byOrder) }))
       }),
 
     updateAccount: (id, patch) =>
       run(async () => {
         const a = await repo.updateAccount(id, patch)
-        set((s) => ({ accounts: s.accounts.map((x) => (x.id === id ? a : x)) }))
+        set((s) => ({ accounts: s.accounts.map((x) => (x.id === id ? a : x)).sort(byOrder) }))
       }),
 
-    addGroup: (name) =>
+    addGroup: (name, color = null) =>
       run(async () => {
-        const g = await repo.createGroup({ name, sortOrder: nextOrder(get().groups) })
+        const g = await repo.createGroup({ name, sortOrder: nextOrder(get().groups), color })
         set((s) => ({ groups: [...s.groups, g].sort(byOrder) }))
       }),
 
@@ -96,6 +103,15 @@ export const useLedger = create<LedgerState>((set, get) => {
       run(async () => {
         const g = await repo.updateGroup(id, patch)
         set((s) => ({ groups: s.groups.map((x) => (x.id === id ? g : x)).sort(byOrder) }))
+      }),
+
+    removeGroup: (id) =>
+      run(async () => {
+        await repo.deleteGroup(id)
+        set((s) => ({
+          groups: s.groups.filter((x) => x.id !== id),
+          buckets: s.buckets.map((b) => b.groupId === id ? { ...b, groupId: null } : b),
+        }))
       }),
 
     addBucket: (input) =>
@@ -108,6 +124,15 @@ export const useLedger = create<LedgerState>((set, get) => {
       run(async () => {
         const b = await repo.updateBucket(id, patch)
         set((s) => ({ buckets: s.buckets.map((x) => (x.id === id ? b : x)).sort(byOrder) }))
+      }),
+
+    removeBucket: (id) =>
+      run(async () => {
+        if (get().events.some((e) => e.bucketId === id || e.toBucketId === id)) {
+          throw new Error('This bucket has transaction history. Archive it instead of deleting it.')
+        }
+        await repo.deleteBucket(id)
+        set((s) => ({ buckets: s.buckets.filter((x) => x.id !== id) }))
       }),
 
     addEvent: (event) =>

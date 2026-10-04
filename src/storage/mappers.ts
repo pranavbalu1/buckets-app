@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { ACCOUNT_TYPES, BUCKET_KINDS } from '../domain/models'
+import { ACCOUNT_TYPES, BUCKET_KINDS, LEGACY_BUCKET_KINDS } from '../domain/models'
 import type { Account, Bucket, BucketGroup } from '../domain/models'
 import type { EventType, LedgerEvent } from '../domain/types'
 
@@ -11,6 +11,7 @@ const accountRow = z.object({
   id: z.string(),
   name: z.string(),
   type: z.enum(ACCOUNT_TYPES),
+  sort_order: z.number().int().default(0),
   archived: z.boolean(),
 })
 
@@ -18,16 +19,19 @@ const groupRow = z.object({
   id: z.string(),
   name: z.string(),
   sort_order: z.number().int(),
+  color: z.string().nullable().default(null),
 })
 
 const bucketRow = z.object({
   id: z.string(),
   group_id: z.string().nullable(),
   name: z.string(),
-  kind: z.enum(BUCKET_KINDS),
+  kind: z.union([z.enum(BUCKET_KINDS), z.enum(LEGACY_BUCKET_KINDS)]),
   sort_order: z.number().int(),
   archived: z.boolean(),
   monthly_target_cents: z.number().int(),
+  target_cents: z.number().int().nullable().default(null),
+  target_date: z.string().nullable().default(null),
   color: z.string().nullable(),
 })
 
@@ -47,11 +51,14 @@ const eventRow = z.object({
   notes: z.string().nullable(),
 })
 
-export const parseAccount = (row: unknown): Account => accountRow.parse(row)
+export const parseAccount = (row: unknown): Account => {
+  const r = accountRow.parse(row)
+  return { id: r.id, name: r.name, type: r.type, sortOrder: r.sort_order, archived: r.archived }
+}
 
 export function parseGroup(row: unknown): BucketGroup {
   const r = groupRow.parse(row)
-  return { id: r.id, name: r.name, sortOrder: r.sort_order }
+  return { id: r.id, name: r.name, sortOrder: r.sort_order, color: r.color }
 }
 
 export function parseBucket(row: unknown): Bucket {
@@ -64,6 +71,8 @@ export function parseBucket(row: unknown): Bucket {
     sortOrder: r.sort_order,
     archived: r.archived,
     monthlyTargetCents: r.monthly_target_cents,
+    targetCents: r.target_cents,
+    targetDate: r.target_date,
     color: r.color,
   }
 }

@@ -1,13 +1,23 @@
 export const ACCOUNT_TYPES = ['checking', 'savings', 'cash', 'credit_card', 'other'] as const
 export type AccountType = (typeof ACCOUNT_TYPES)[number]
 
-export const BUCKET_KINDS = ['spending', 'savings', 'obligation'] as const
+export const BUCKET_KINDS = [
+  'plain',
+  'recurring',
+  'save_by_date',
+  'save_by_deposit',
+  'save_until_date',
+] as const
 export type BucketKind = (typeof BUCKET_KINDS)[number]
+export const LEGACY_BUCKET_KINDS = ['spending', 'savings', 'obligation'] as const
+export type LegacyBucketKind = (typeof LEGACY_BUCKET_KINDS)[number]
+export type StoredBucketKind = BucketKind | LegacyBucketKind
 
 export interface Account {
   id: string
   name: string
   type: AccountType
+  sortOrder: number
   archived: boolean
 }
 
@@ -15,17 +25,20 @@ export interface BucketGroup {
   id: string
   name: string
   sortOrder: number
+  color: string | null
 }
 
 export interface Bucket {
   id: string
   groupId: string | null
   name: string
-  kind: BucketKind
+  kind: StoredBucketKind
   sortOrder: number
   archived: boolean
   /** The "Want": how much you would like to put in this bucket each month. */
   monthlyTargetCents: number
+  targetCents: number | null
+  targetDate: string | null
   /** Hex color for the dot, or null to pick one automatically. */
   color: string | null
 }
@@ -38,10 +51,23 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   other: 'Other',
 }
 
-export const BUCKET_KIND_LABELS: Record<BucketKind, string> = {
-  spending: 'Spending',
-  savings: 'Savings',
-  obligation: 'Obligation',
+export const BUCKET_KIND_LABELS: Record<StoredBucketKind, string> = {
+  plain: 'Plain old bucket',
+  recurring: 'Recurring expense',
+  save_by_date: 'Save X by Y date',
+  save_by_deposit: 'Save X by depositing Z/mo',
+  save_until_date: 'Save Z/mo until Y date',
+  spending: 'Plain old bucket',
+  savings: 'Save X by depositing Z/mo',
+  obligation: 'Recurring expense',
+}
+
+export const BUCKET_KIND_DESCRIPTIONS: Record<BucketKind, string> = {
+  plain: 'Hold money until you decide to spend it.',
+  recurring: 'Set an amount to put aside every month.',
+  save_by_date: 'Reach a target amount by a specific date.',
+  save_by_deposit: 'Save a target amount at an affordable monthly pace.',
+  save_until_date: 'Set a monthly amount and see what you will have by a date.',
 }
 
 export const BUCKET_COLORS = [

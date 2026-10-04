@@ -10,6 +10,11 @@
 
     /* Bundler mode */
     "moduleResolution": "bundler",
+    "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
+    "paths": {
+      "@/*": ["src/*"]
+    },
     "allowImportingTsExtensions": true,
     "verbatimModuleSyntax": true,
     "moduleDetection": "force",
@@ -22,5 +27,15 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": [
+    "src/App.tsx",
+    "src/main.tsx",
+    "src/nav.ts",
+    "src/components/**/*.tsx",
+    "src/domain/**/*.ts",
+    "src/features/**/*.tsx",
+    "src/lib/**/*.ts",
+    "src/storage/**/*.ts",
+    "src/components/ui/inline-menu.tsx"
+  ]
 }
