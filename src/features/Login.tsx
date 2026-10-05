@@ -20,6 +20,7 @@ const registerSchema = z.object({
   path: ['confirmPassword'],
   message: 'Passwords do not match.',
 })
+const registrationNotice = 'If you can’t sign in, check your inbox for any required confirmation message. If you already have an account, choose Sign in instead.'
 
 export default function Login({ initialError = '' }: { initialError?: string }) {
   const [email, setEmail] = useState('')
@@ -63,10 +64,18 @@ export default function Login({ initialError = '' }: { initialError?: string }) 
           password,
           options: { data: { full_name: displayName } },
         })
-        if (signUpError) throw signUpError
-        setNotice(data.session
-          ? 'Your account is ready. Opening your workspace…'
-          : 'Account created. Check your email for a confirmation link before signing in.')
+        if (signUpError) {
+          if (/user already registered|email.*already (?:registered|exists)/i.test(signUpError.message)) {
+            setNotice(registrationNotice)
+            return
+          }
+          throw signUpError
+        }
+        if (data.user?.identities?.length === 0) {
+          setNotice(registrationNotice)
+          return
+        }
+        setNotice(data.session ? 'Your account is ready. Opening your workspace…' : registrationNotice)
       }
     } catch (authError) {
       setError(authError instanceof Error ? authError.message : mode === 'signin' ? 'Unable to sign in. Please try again.' : 'Unable to create your account. Please try again.')
