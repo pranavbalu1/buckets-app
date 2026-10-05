@@ -12,9 +12,9 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 
-import { cn } from '@/lib/utils';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
+import { cn } from './utils';
+import { Input } from './input';
+import { Button } from './button';
 import { FormField, FormSection } from './form-field';
 import { SegmentedControl } from './segmented-control';
 

@@ -10,8 +10,8 @@ import {
   Plus,
 } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '../ui/button';
+import { Skeleton } from '../ui/skeleton';
 
 // ============================================================================
 // DEMO COMPONENTS WITH ATTACHED SKELETONS

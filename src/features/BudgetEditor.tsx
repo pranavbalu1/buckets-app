@@ -1,6 +1,5 @@
 import { useState } from 'react'
-import Field from '../components/Field'
-import { Modal } from '../components/ui/modal'
+import { Field, Modal } from '../components'
 import { centsToInput, parseDollars } from '../domain/money'
 import {
   BUCKET_COLORS,

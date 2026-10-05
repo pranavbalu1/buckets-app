@@ -1,4 +1,6 @@
-export default function ProgressBar({ pct, over = false, color }: { pct: number; over?: boolean; color?: string }) {
+export interface ProgressBarProps { pct: number; over?: boolean; color?: string }
+
+export default function ProgressBar({ pct, over = false, color }: ProgressBarProps) {
   const width = Math.max(0, Math.min(100, pct))
   const progressColor = over ? 'var(--color-bad)' : color ?? 'var(--color-accent)'
   return (

@@ -1,4 +1,4 @@
-import { MetricCard } from '@/components/ui/metric-card';
+import { MetricCard } from '../ui/metric-card';
 
 export function MetricCardShowcase() {
   return (

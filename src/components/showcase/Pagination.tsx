@@ -9,7 +9,7 @@ import {
   ArrowRightLeft,
 } from 'lucide-react';
 
-import { Button } from '@/components/ui/button';
+import { Button } from '../ui/button';
 import { Pagination } from '../ui/pagination';
 
 export function PaginationShowcase() {

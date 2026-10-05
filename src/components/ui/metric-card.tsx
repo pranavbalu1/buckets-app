@@ -2,7 +2,7 @@ import * as React from 'react';
 import { ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { cva, type VariantProps } from 'class-variance-authority';
 
-import { cn } from '@/lib/utils';
+import { cn } from './utils';
 
 const metricCardVariants = cva(
   'relative box-border overflow-hidden rounded-3xl p-5 transition-all duration-200 select-none flex flex-col justify-between',

@@ -4,13 +4,13 @@ import {
   SemiGaugeGraph,
   AreaLineGraph,
   MiniSparklineGraph,
-} from '@/components/ui/charts';
+} from '../ui/charts';
 import type {
   SpendingCategory,
   StackedColumn,
   LinePoint,
-} from '@/components/ui/charts';
-import { cn } from '@/lib/utils';
+} from '../ui/charts';
+import { cn } from '../ui/utils';
 
 /* ==========================================================================
    SHOWCASE PRESET DATASETS

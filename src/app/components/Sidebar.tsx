@@ -12,11 +12,11 @@ import {
   WalletCards,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { computeBalances } from '../domain/balances'
-import { formatCents } from '../domain/money'
-import { TABS } from '../nav'
-import type { Tab } from '../nav'
-import { useLedger } from '../storage/store'
+import { computeBalances } from '../../domain/balances'
+import { formatCents } from '../../domain/money'
+import { TABS } from '../../nav'
+import type { Tab } from '../../nav'
+import { useLedger } from '../../storage/store'
 import BrandMark from './BrandMark'
 
 const tabIcons: Record<Tab, LucideIcon> = {

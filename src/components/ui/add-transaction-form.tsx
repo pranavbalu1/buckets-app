@@ -4,8 +4,8 @@ import { FormField, FormSection } from './form-field';
 import { Select } from './select';
 import { CurrencyInput } from './currency-input';
 import { SegmentedControl } from './segmented-control';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
+import { Input } from './input';
+import { Button } from './button';
 
 export function AddTransactionForm({ onCancel }: { onCancel?: () => void }) {
   const [type, setType] = React.useState('expense');

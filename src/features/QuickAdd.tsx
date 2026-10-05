@@ -7,9 +7,7 @@ import type { DraftEvent, EventType, LedgerEvent } from '../domain/types'
 import { directionSchema, validateEvent } from '../domain/validate'
 import type { AddKind } from '../nav'
 import { useLedger } from '../storage/store'
-import { Button } from '../components/ui/button'
-import { FormField } from '../components/ui/form-field'
-import { Input } from '../components/ui/input'
+import { Button, FormField, Input } from '../components'
 
 const KINDS: { id: AddKind; label: string }[] = [
   { id: 'expense', label: 'Expense' },

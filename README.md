@@ -8,6 +8,8 @@ The app is a static React front end backed by Supabase Postgres and Auth. It doe
 
 The visual theme follows the included UI library: charcoal surfaces with electric lime, cyan, and emerald accents. The shipped Gilroy font files are used throughout the application.
 
+The reusable UI library lives in [`src/components`](src/components/README.md). It has a public barrel export, self-contained theme stylesheet, and no finance-app or Supabase imports, so the folder can be copied into another Tailwind v4 project.
+
 ## Features
 
 - Email and password sign-in with a persistent Supabase session.
@@ -169,8 +171,9 @@ Configure the host's SPA fallback so direct visits to `/dashboard`, `/budget`, `
 src/domain/       Pure ledger, budget, and analytics calculations
 src/features/     Dashboard, budget, transactions, analytics, accounts, settings
 src/storage/      Repository adapter, Supabase mappings, backup schema and download
-src/components/ui/Reusable UI library components, charts, and the Sankey diagram
-src/components/showcase/Examples of the UI library in use
+src/components/  Portable UI components, theme tokens, and showcase examples
+src/app/         App-specific navigation, page skeletons, and money formatting
+src/features/analytics/  Finance-data Sankey diagram
 supabase/migrations/  Database schema, constraints, RLS, and database functions
 docs/             Security and release checklist
 ```

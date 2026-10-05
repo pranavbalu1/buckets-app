@@ -1,4 +1,4 @@
-import { formatCents } from '../domain/money'
+import { formatCents } from '../../domain/money'
 
 export default function Money({ cents, className = '' }: { cents: number; className?: string }) {
   return (

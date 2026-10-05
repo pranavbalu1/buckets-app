@@ -1,6 +1,7 @@
-import { cn } from '@/lib/utils';
+import { cn } from './utils';
+import type { ComponentProps } from 'react'
 
-type LabelProps = React.ComponentProps<'label'>;
+type LabelProps = ComponentProps<'label'>;
 
 function Label({ className, ...props }: LabelProps) {
   return (

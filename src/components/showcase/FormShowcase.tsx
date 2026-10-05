@@ -13,10 +13,10 @@ import {
   Sparkles,
 } from 'lucide-react';
 
-import { cn } from '@/lib/utils';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { List, type ListItemData } from '@/components/ui/list';
+import { cn } from '../ui/utils';
+import { Input } from '../ui/input';
+import { Button } from '../ui/button';
+import { List, type ListItemData } from '../ui/list';
 
 import { FormField, FormSection } from '../ui/form-field';
 import { Select } from '../ui/select';

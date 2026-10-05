@@ -1,6 +1,5 @@
-import type { Tab } from '../nav'
-import { Card } from './ui/card'
-import { Skeleton } from './ui/skeleton'
+import type { Tab } from '../../nav'
+import { Card, Skeleton } from '../../components'
 
 export type SkeletonPage = Exclude<Tab, 'Budget'> | 'DevTools' | 'Login'
 

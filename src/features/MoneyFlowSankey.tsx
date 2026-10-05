@@ -1,2 +1,2 @@
-/** Compatibility export; the reusable Sankey chart lives in the UI library. */
-export { default } from '../components/ui/sankey-chart'
+/** Compatibility export for older imports of the analytics Sankey. */
+export { default } from './analytics/MoneyFlowSankey'

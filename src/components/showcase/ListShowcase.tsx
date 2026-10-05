@@ -10,7 +10,7 @@ import {
   Globe,
 } from 'lucide-react';
 
-import { List, type ListItemData } from '@/components/ui/list';
+import { List, type ListItemData } from '../ui/list';
 
 const sampleTransactions: ListItemData[] = [
   {

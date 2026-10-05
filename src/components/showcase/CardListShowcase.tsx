@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { CardDeck, type CardItem } from '@/components/ui/card-deck';
+import { CardDeck, type CardItem } from '../ui/card-deck';
 import {
   Sparkles,
   Wallet,

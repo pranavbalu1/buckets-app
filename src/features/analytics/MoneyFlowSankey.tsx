@@ -6,10 +6,9 @@ import { effectiveDate, computeBalances } from '../../domain/balances'
 import { formatCents } from '../../domain/money'
 import type { Bucket, BucketGroup } from '../../domain/models'
 import type { LedgerEvent } from '../../domain/types'
-import { Select } from './select'
-import { GraphHoverTooltip } from './charts'
+import { GraphHoverTooltip, Select } from '../../components'
 
-interface FlowNode extends SankeyExtraProperties { id: string; label: string; color: string }
+interface FlowNode extends SankeyExtraProperties { id: string; label: string; color: string; sortOrder: number }
 interface FlowLink extends SankeyExtraProperties { source: string; target: string; value: number }
 type LayoutNode = SankeyNode<FlowNode, FlowLink>
 type LayoutLink = SankeyLink<FlowNode, FlowLink>
@@ -81,10 +80,18 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
     const endBalances = computeBalances(events, endDate)
     const opening = computeBalances(beforeEvents)
     const groupById = new Map(groups.map((group) => [group.id, group]))
+    const orderedGroups = [...groups].sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+    const groupOrder = new Map(orderedGroups.map((group, index) => [group.id, index]))
+    const orderedBuckets = [...buckets].sort((a, b) => {
+      const aGroup = a.groupId ? groupOrder.get(a.groupId) ?? orderedGroups.length : orderedGroups.length
+      const bGroup = b.groupId ? groupOrder.get(b.groupId) ?? orderedGroups.length : orderedGroups.length
+      return aGroup - bGroup || a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)
+    })
+    const bucketOrder = new Map(orderedBuckets.map((bucket, index) => [bucket.id, index]))
     const nodes = new Map<string, FlowNode>()
     const links: FlowLink[] = []
-    const ensure = (id: string, label: string, color: string) => {
-      if (!nodes.has(id)) nodes.set(id, { id, label, color })
+    const ensure = (id: string, label: string, color: string, sortOrder = nodes.size) => {
+      if (!nodes.has(id)) nodes.set(id, { id, label, color, sortOrder })
       return id
     }
     const addLink = (source: string, target: string, value: number) => {
@@ -96,7 +103,7 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
       const selectedGroup = activeGroupId === 'ungrouped' ? null : groupById.get(activeGroupId)
       const groupLabel = selectedGroup?.name ?? 'Ungrouped buckets'
       const groupColor = selectedGroup?.color ?? PALETTE[2]
-      const focusedBuckets = buckets.filter((bucket) => activeGroupId === 'ungrouped'
+      const focusedBuckets = orderedBuckets.filter((bucket) => activeGroupId === 'ungrouped'
         ? !bucket.groupId
         : bucket.groupId === activeGroupId)
       const focusedEvents = periodEvents.filter((event) => event.type === 'expense' && focusedBuckets.some((bucket) => bucket.id === event.bucketId))
@@ -105,26 +112,31 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
         const name = event.payee?.trim() || event.description.trim() || 'Other spending'
         payeeTotals.set(name, (payeeTotals.get(name) ?? 0) + event.amountCents)
       }
-      const topPayees = new Set([...payeeTotals.entries()]
-        .sort((a, b) => b[1] - a[1])
+      const topPayeeNames = [...payeeTotals.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
         .slice(0, 5)
-        .map(([name]) => name))
-      const merchantColors = new Map<string, string>()
-      const groupActivity = ensure('group-activity', `${groupLabel} activity`, groupColor)
+        .map(([name]) => name)
+      const topPayees = new Set(topPayeeNames)
+      const merchantColors = new Map(topPayeeNames.map((name, index) => [name, PALETTE[index % PALETTE.length]]))
+      const groupActivity = ensure('group-activity', `${groupLabel} activity`, groupColor, 0)
+      if (showMerchants) {
+        topPayeeNames.forEach((name, index) => ensure(`payee:${name}`, name, merchantColors.get(name)!, index))
+        ensure('other-payees', 'Other payees', '#64748b', topPayeeNames.length)
+      }
 
-      for (const bucket of focusedBuckets) {
+      focusedBuckets.forEach((bucket, bucketIndex) => {
         const bucketEvents = focusedEvents.filter((event) => event.bucketId === bucket.id)
         const spent = bucketEvents.reduce((total, event) => total + event.amountCents, 0)
         const closingBalance = endBalances.buckets[bucket.id] ?? 0
         const unspent = Math.max(0, closingBalance)
         const resource = spent + unspent
-        if (resource <= 0) continue
+        if (resource <= 0) return
 
-        const bucketNode = ensure(`bucket:${bucket.id}`, bucket.name, bucket.color ?? PALETTE[3])
+        const bucketNode = ensure(`bucket:${bucket.id}`, bucket.name, bucket.color ?? PALETTE[3], bucketIndex)
         addLink(groupActivity, bucketNode, resource)
 
         if (!showMerchants) {
-          continue
+          return
         }
 
         const bucketPayees = new Map<string, number>()
@@ -134,13 +146,12 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
         }
         for (const [name, amount] of bucketPayees) {
           if (topPayees.has(name)) {
-            if (!merchantColors.has(name)) merchantColors.set(name, PALETTE[merchantColors.size % PALETTE.length])
             addLink(bucketNode, ensure(`payee:${name}`, name, merchantColors.get(name)!), amount)
           } else {
             addLink(bucketNode, ensure('other-payees', 'Other payees', '#64748b'), amount)
           }
         }
-      }
+      })
 
       const valid = [...links.reduce((set, link) => set.add(link.source).add(link.target), new Set<string>())]
       const graphNodes = [...nodes.values()].filter((node) => valid.includes(node.id))
@@ -148,8 +159,10 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
       const layoutHeight = Math.max(320, graphNodes.length * 30)
       const layout = sankey<FlowNode, FlowLink>()
         .nodeId((node) => node.id)
+        .nodeSort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id))
         .nodeWidth(14)
         .nodePadding(18)
+        .iterations(32)
         .extent([[12, 14], [928, layoutHeight]])({ nodes: graphNodes, links })
       return { layout, layoutHeight }
     }
@@ -181,7 +194,7 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
     let startingBucketBalances = 0
     let unfundedBucketActivity = 0
 
-    for (const bucket of buckets) {
+    for (const bucket of orderedBuckets) {
       const allocated = Math.max(0, allocatedByBucket.get(bucket.id) ?? 0)
       const openingBalance = Math.max(0, opening.buckets[bucket.id] ?? 0)
       const knownFunding = allocated + openingBalance
@@ -209,17 +222,17 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
 
     for (const [groupId, amount] of groupFlows) {
       const label = groupId === 'ungrouped' ? 'Ungrouped buckets' : groupById.get(groupId)?.name ?? 'Other group'
-      const groupNode = ensure(`group:${groupId}`, label, PALETTE[2])
+      const groupNode = ensure(`group:${groupId}`, label, PALETTE[2], groupOrder.get(groupId) ?? orderedGroups.length)
       addLink(available, groupNode, amount)
     }
 
-    for (const bucket of buckets) {
+    for (const bucket of orderedBuckets) {
       const amount = bucketFlows.get(bucket.id) ?? 0
       if (amount <= 0) continue
       const groupId = bucket.groupId ?? 'ungrouped'
       const label = groupId === 'ungrouped' ? 'Ungrouped buckets' : groupById.get(groupId)?.name ?? 'Other group'
-      const groupNode = ensure(`group:${groupId}`, label, PALETTE[2])
-      const bucketNode = ensure(`bucket:${bucket.id}`, bucket.name, bucket.color ?? PALETTE[3])
+      const groupNode = ensure(`group:${groupId}`, label, PALETTE[2], groupOrder.get(groupId) ?? orderedGroups.length)
+      const bucketNode = ensure(`bucket:${bucket.id}`, bucket.name, bucket.color ?? PALETTE[3], bucketOrder.get(bucket.id) ?? orderedBuckets.length)
       addLink(groupNode, bucketNode, amount)
     }
 
@@ -246,8 +259,10 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
     const layoutHeight = Math.max(320, graphNodes.length * 28)
     const layout = sankey<FlowNode, FlowLink>()
       .nodeId((node) => node.id)
+      .nodeSort((a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id))
       .nodeWidth(14)
       .nodePadding(18)
+      .iterations(32)
       .extent([[12, 14], [928, layoutHeight]])({ nodes: graphNodes, links })
     return { layout, layoutHeight }
   }, [events, buckets, groups, startDate, endDate, activeGroupId, showMerchants])

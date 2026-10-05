@@ -6,7 +6,7 @@ import {
   TrendingUp,
   TrendingDown,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn } from './utils';
 
 /* ==========================================================================
    COLOR MAPPER HELPER

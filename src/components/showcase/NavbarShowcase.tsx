@@ -9,7 +9,7 @@ import {
   Building2,
 } from 'lucide-react';
 
-import { Navbar, type NavItem } from '@/components/ui/navbar';
+import { Navbar, type NavItem } from '../ui/navbar';
 
 export function NavbarShowcase() {
   const [activeTabLog, setActiveTabLog] = React.useState<string>('home');

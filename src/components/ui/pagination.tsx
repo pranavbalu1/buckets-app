@@ -7,8 +7,8 @@ import {
   MoreHorizontal,
 } from 'lucide-react';
 
-import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
+import { cn } from './utils';
+import { Button } from './button';
 
 export interface PaginationProps extends React.HTMLAttributes<HTMLDivElement> {
   currentPage: number;

@@ -1,8 +1,8 @@
 import * as React from 'react';
 import { ChevronRight } from 'lucide-react';
 
-import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
+import { cn } from './utils';
+import { Button } from './button';
 
 export interface ListItemData {
   id: string;

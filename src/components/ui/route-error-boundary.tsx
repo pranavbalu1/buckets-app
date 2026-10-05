@@ -1,7 +1,7 @@
 import { Component } from 'react'
 import type { ReactNode } from 'react'
-import { Button } from './ui/button'
-import { Card } from './ui/card'
+import { Button } from './button'
+import { Card } from './card'
 
 interface Props { children: ReactNode }
 interface State { hasError: boolean }

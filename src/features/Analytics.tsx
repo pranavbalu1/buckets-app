@@ -1,20 +1,14 @@
 import { useMemo, useState } from 'react'
 import { addMonths, addWeeks, addYears, format } from 'date-fns'
 import { ArrowLeft, ArrowRight, BarChart3, CircleDollarSign, ReceiptText, WalletCards } from 'lucide-react'
-import { Button } from '../components/ui/button'
-import { Card } from '../components/ui/card'
-import { Tile, TileBoard } from '../components/TileLayout'
-import { AreaLineGraph, BudgetGaugeGraph, SemiGaugeGraph, StackedBarGraph } from '../components/ui/charts'
-import { MetricCard } from '../components/ui/metric-card'
-import { Select } from '../components/ui/select'
-import { SegmentedControl } from '../components/ui/segmented-control'
+import { AreaLineGraph, BudgetGaugeGraph, Button, Card, MetricCard, Select, SegmentedControl, SemiGaugeGraph, StackedBarGraph, Tile, TileBoard } from '../components'
 import { buildAnalytics } from '../domain/analytics'
 import type { AnalyticsPeriod } from '../domain/analytics'
 import { todayString } from '../domain/dates'
 import { formatCents } from '../domain/money'
 import { dateSchema, firstIssueMessage } from '../domain/validate'
 import { useLedger } from '../storage/store'
-import SankeyChart from '../components/ui/sankey-chart'
+import SankeyChart from './analytics/MoneyFlowSankey'
 
 const CHART_COLORS = [
   'var(--color-chart-1)', 'var(--color-chart-2)', 'var(--color-chart-3)', 'var(--color-chart-4)',
