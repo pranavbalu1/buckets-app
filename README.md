@@ -51,8 +51,9 @@ Run every SQL migration in `supabase/migrations/` in numeric order in the Supaba
 8. `008_transaction_labels.sql`
 9. `009_developer_tools.sql`
 10. `010_account_deletion.sql`
+11. `011_unique_account_and_bucket_names.sql`
 
-The migrations enable RLS on every app table. Migration 007 upgrades existing monthly income streams to confirm-before-post recurring plans and creates the reconciliation and atomic backup-restore functions. Migration 008 adds optional custom transaction labels and keeps them in backup restores. Migration 009 adds the development-only reset RPC, which atomically clears finance data belonging to the signed-in user while preserving their Supabase Auth account. Migration 010 adds atomic account deletion for the signed-in user and its linked records. For a new project, apply the full sequence once. Back up data before applying schema changes to an existing project.
+The migrations enable RLS on every app table. Migration 007 upgrades existing monthly income streams to confirm-before-post recurring plans and creates the reconciliation and atomic backup-restore functions. Migration 008 adds optional custom transaction labels and keeps them in backup restores. Migration 009 adds the development-only reset RPC, which atomically clears finance data belonging to the signed-in user while preserving their Supabase Auth account. Migration 010 adds atomic account deletion for the signed-in user and its linked records. Migration 011 makes account and bucket names unique per user, renaming later existing duplicates with a numeric suffix before creating the unique indexes. For a new project, apply the full sequence once. Back up data before applying schema changes to an existing project.
 
 ### 3. Configure the browser client
 

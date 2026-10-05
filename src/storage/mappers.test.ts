@@ -13,6 +13,7 @@ describe('mappers', () => {
       bucketId: 'b1',
       toBucketId: null,
       direction: null,
+      customType: null,
       description: 'Walmart',
       payee: 'Walmart',
       notes: null,
