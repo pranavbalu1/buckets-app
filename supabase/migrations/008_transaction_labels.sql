@@ -1,13 +1,32 @@
 -- Transactions can use a custom user-defined label alongside their built-in ledger type.
-alter table ledger_events add column custom_type text;
-alter table ledger_events add constraint ledger_events_custom_type_check
-  check (custom_type is null or length(btrim(custom_type)) between 1 and 40);
+alter table ledger_events add column if not exists custom_type text;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'public.ledger_events'::regclass
+      and conname = 'ledger_events_custom_type_check'
+  ) then
+    alter table ledger_events add constraint ledger_events_custom_type_check
+      check (custom_type is null or length(btrim(custom_type)) between 1 and 40);
+  end if;
+end
+$$;
 
 -- Keep the v7 atomic restore routine for replacing ledger data, then restore labels
 -- from the same backup payload. Missing labels in older v1 backups remain null.
-alter function restore_ledger(jsonb) rename to restore_ledger_v7;
+do $$
+begin
+  if to_regprocedure('public.restore_ledger_v7(jsonb)') is null
+     and to_regprocedure('public.restore_ledger(jsonb)') is not null then
+    alter function restore_ledger(jsonb) rename to restore_ledger_v7;
+  end if;
+end
+$$;
 
-create function restore_ledger(p_backup jsonb) returns void
+create or replace function restore_ledger(p_backup jsonb) returns void
 language plpgsql
 security invoker
 set search_path = public
