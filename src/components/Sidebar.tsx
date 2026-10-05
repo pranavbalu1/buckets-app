@@ -16,6 +16,7 @@ import { formatCents } from '../domain/money'
 import { TABS } from '../nav'
 import type { Tab } from '../nav'
 import { useLedger } from '../storage/store'
+import BrandMark from './BrandMark'
 
 const tabIcons: Record<Tab, LucideIcon> = {
   Dashboard: LayoutDashboard,
@@ -50,7 +51,7 @@ export default function Sidebar({
       <div className="flex items-center justify-between px-4 py-4 md:px-5 md:py-5">
         <div className="flex items-center gap-3">
           <span className="grid size-10 place-items-center rounded-xl bg-accent text-accent-ink shadow-sm">
-            <WalletCards className="size-5" strokeWidth={2.3} />
+            <BrandMark className="size-6" />
           </span>
           <div>
             <span className="block text-base font-semibold tracking-tight text-ink">Buckets</span>

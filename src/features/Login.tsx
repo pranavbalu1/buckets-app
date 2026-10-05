@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { ArrowUpRight, Check, Layers3, LockKeyhole, WalletCards } from 'lucide-react'
+import { ArrowUpRight, Check, Layers3, LockKeyhole } from 'lucide-react'
 import { Button } from '../components/ui/button'
+import BrandMark from '../components/BrandMark'
 import { Card } from '../components/ui/card'
 import { FormField } from '../components/ui/form-field'
 import { Input } from '../components/ui/input'
@@ -42,7 +43,7 @@ export default function Login() {
           <div className="absolute -right-24 -top-28 size-80 rounded-full border-[44px] border-white/[0.045]" aria-hidden />
           <div className="absolute -bottom-36 -left-20 size-96 rounded-full bg-[#00bdf9]/10 blur-3xl" aria-hidden />
           <div className="relative flex items-center gap-3">
-            <span className="grid size-10 place-items-center rounded-xl bg-[#e6ff4b] text-zinc-950"><WalletCards className="size-5" /></span>
+            <span className="grid size-10 place-items-center rounded-xl bg-accent text-accent-ink"><BrandMark className="size-6" /></span>
             <div>
               <span className="block text-base font-semibold tracking-tight">Buckets</span>
               <span className="block text-[10px] font-medium tracking-[0.15em] text-white/55 uppercase">Money, with intention</span>
