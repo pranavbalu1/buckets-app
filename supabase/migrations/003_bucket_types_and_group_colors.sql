@@ -1,5 +1,5 @@
 alter table bucket_groups
-  add column color text;
+  add column if not exists color text;
 
 alter table buckets
   drop constraint if exists buckets_kind_check,

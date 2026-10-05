@@ -1,3 +1,3 @@
 alter table buckets
-  add column target_cents bigint,
-  add column target_date date;
+  add column if not exists target_cents bigint,
+  add column if not exists target_date date;
