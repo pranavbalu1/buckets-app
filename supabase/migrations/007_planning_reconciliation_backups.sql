@@ -1,4 +1,4 @@
-create table recurring_plans (
+create table if not exists recurring_plans (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   name text not null,
@@ -29,10 +29,17 @@ create table recurring_plans (
   )
 );
 
-create index recurring_plans_due on recurring_plans (user_id, active, next_run);
+create index if not exists recurring_plans_due on recurring_plans (user_id, active, next_run);
 alter table recurring_plans enable row level security;
-create policy "own rows" on recurring_plans for all to authenticated
-  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname = 'public'
+    and tablename = 'recurring_plans' and policyname = 'own rows') then
+    create policy "own rows" on recurring_plans for all to authenticated
+      using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+  end if;
+end
+$$;
 
 -- Upgrade previously saved monthly income streams into confirm-before-post plans.
 insert into recurring_plans (id, user_id, name, event_type, amount_cents, account_id, frequency, start_date, next_run, active)
@@ -40,7 +47,7 @@ select id, user_id, name, 'income', amount_cents, account_id, 'monthly', created
 from income_streams
 on conflict (id) do nothing;
 
-create table paycheck_templates (
+create table if not exists paycheck_templates (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   name text not null,
@@ -50,10 +57,17 @@ create table paycheck_templates (
   updated_at timestamptz not null default now()
 );
 alter table paycheck_templates enable row level security;
-create policy "own rows" on paycheck_templates for all to authenticated
-  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname = 'public'
+    and tablename = 'paycheck_templates' and policyname = 'own rows') then
+    create policy "own rows" on paycheck_templates for all to authenticated
+      using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+  end if;
+end
+$$;
 
-create table reconciliations (
+create table if not exists reconciliations (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   account_id uuid not null references accounts(id),
@@ -64,13 +78,20 @@ create table reconciliations (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
-create index reconciliations_by_account on reconciliations (user_id, account_id, date desc);
+create index if not exists reconciliations_by_account on reconciliations (user_id, account_id, date desc);
 alter table reconciliations enable row level security;
-create policy "own rows" on reconciliations for all to authenticated
-  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+do $$
+begin
+  if not exists (select 1 from pg_policies where schemaname = 'public'
+    and tablename = 'reconciliations' and policyname = 'own rows') then
+    create policy "own rows" on reconciliations for all to authenticated
+      using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+  end if;
+end
+$$;
 
 -- Record an account check and its optional ledger adjustment atomically.
-create function record_reconciliation(
+create or replace function record_reconciliation(
   p_account_id uuid,
   p_date date,
   p_statement_balance_cents bigint,
@@ -110,7 +131,7 @@ grant execute on function record_reconciliation(uuid, date, bigint, bigint, bool
 
 -- Confirm a pending occurrence once, or skip it. The event and schedule update
 -- happen in the same transaction so two devices cannot post the same occurrence.
-create function complete_recurring_plan(p_plan_id uuid, p_occurrence_date date, p_confirm boolean)
+create or replace function complete_recurring_plan(p_plan_id uuid, p_occurrence_date date, p_confirm boolean)
 returns uuid
 language plpgsql
 security invoker
@@ -155,7 +176,7 @@ grant execute on function complete_recurring_plan(uuid, date, boolean) to authen
 
 -- Restore a complete portable backup as one database transaction. RLS remains enabled;
 -- every inserted user_id is taken from the authenticated session, never from the file.
-create function restore_ledger(p_backup jsonb) returns void
+create or replace function restore_ledger(p_backup jsonb) returns void
 language plpgsql
 security invoker
 set search_path = public
