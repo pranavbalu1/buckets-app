@@ -1,4 +1,4 @@
-create table income_streams (
+create table if not exists income_streams (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
   name text not null,
@@ -11,5 +11,19 @@ create table income_streams (
 );
 
 alter table income_streams enable row level security;
-create policy "own rows" on income_streams for all to authenticated
-  using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_policies
+    where schemaname = 'public'
+      and tablename = 'income_streams'
+      and policyname = 'own rows'
+  ) then
+    create policy "own rows" on income_streams for all to authenticated
+      using (user_id = (select auth.uid()))
+      with check (user_id = (select auth.uid()));
+  end if;
+end
+$$;
