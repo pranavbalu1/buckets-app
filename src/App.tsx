@@ -27,7 +27,7 @@ import { CommandMenu } from './components/ui/command-menu'
 import type { CommandItem } from './components/ui/command-menu'
 import Login from './features/Login'
 import Dashboard from './features/Dashboard'
-import Budget from './features/Budget'
+import Budget, { BudgetSkeleton } from './features/Budget'
 import Transactions from './features/Transactions'
 import Accounts from './features/Accounts'
 import QuickAdd from './features/QuickAdd'
@@ -286,10 +286,12 @@ function WorkspaceLayout({
             )}
 
             {status === 'loading' && (
-              <Card className="flex min-h-48 items-center justify-center gap-3 p-8 text-sm text-muted">
-                <span className="size-4 animate-spin rounded-full border-2 border-accent/25 border-t-accent" aria-hidden />
-                Loading your money plan...
-              </Card>
+              tab === 'Budget' ? <BudgetSkeleton /> : (
+                <Card className="flex min-h-48 items-center justify-center gap-3 p-8 text-sm text-muted">
+                  <span className="size-4 animate-spin rounded-full border-2 border-accent/25 border-t-accent" aria-hidden />
+                  Loading your money plan...
+                </Card>
+              )
             )}
             {status === 'error' && (
               <Card className="flex flex-col items-start gap-3 border-destructive/25 p-5" role="alert">

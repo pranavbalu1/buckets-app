@@ -182,22 +182,22 @@
 
 :root[data-theme='light'] {
   color-scheme: light;
-  --color-canvas: #f4f4f5;
+  --color-canvas: #f5f7f4;
   --color-surface: #ffffff;
-  --color-sunken: #e4e4e7;
-  --color-line: #d4d4d8;
-  --color-ink: #18181b;
-  --color-muted: #52525b;
-  --color-accent: #667800;
-  --color-accent-soft: #f1f7cf;
-  --color-accent-ink: #18181b;
-  --color-good: #047857;
-  --color-info: #0369a1;
-  --color-bad: #be123c;
-  --color-bad-soft: #fff1f2;
-  --color-expense: #92400e;
-  --color-expense-soft: #fef3c7;
-  --color-warning: #92400e;
+  --color-sunken: #edf1e9;
+  --color-line: #d5ddcf;
+  --color-ink: #1d281c;
+  --color-muted: #586456;
+  --color-accent: #5b6e00;
+  --color-accent-soft: #eaf2c7;
+  --color-accent-ink: #ffffff;
+  --color-good: #087653;
+  --color-info: #09648a;
+  --color-bad: #b32946;
+  --color-bad-soft: #fff0f2;
+  --color-expense: #875b08;
+  --color-expense-soft: #fff4d8;
+  --color-warning: #805400;
 }
 
 @layer base {

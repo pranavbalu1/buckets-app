@@ -7,6 +7,16 @@ import { todayString } from '../domain/dates'
 import type { NewEvent } from './mappers'
 import type { BucketPatch } from './repository'
 import { supabaseRepository as repo } from './supabaseRepository'
+import {
+  accountInputSchema,
+  accountPatchSchema,
+  bucketInputSchema,
+  bucketPatchSchema,
+  firstIssueMessage,
+  groupInputSchema,
+  groupPatchSchema,
+  ledgerEventSchema,
+} from '../domain/validate'
 
 interface LedgerState {
   status: 'idle' | 'loading' | 'ready' | 'error'
@@ -52,8 +62,43 @@ const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
 const byOrder = <T extends { sortOrder: number; name: string }>(a: T, b: T) =>
   a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)
 const nextOrder = (items: { sortOrder: number }[]) => items.reduce((m, i) => Math.max(m, i.sortOrder), 0) + 1
+const normalizedName = (name: string) => name.trim().toLocaleLowerCase()
+const hasNameConflict = <T extends { id: string; name: string }>(items: T[], name: string, exceptId?: string) =>
+  items.some((item) => item.id !== exceptId && normalizedName(item.name) === normalizedName(name))
 
 export const useLedger = create<LedgerState>((set, get) => {
+  function rejectInput(message: string): false {
+    set({ error: message })
+    return false
+  }
+
+  function normalizeEvent(event: NewEvent): NewEvent | null {
+    const result = ledgerEventSchema.safeParse(event)
+    if (!result.success) {
+      set({ error: firstIssueMessage(result.error, 'Enter a valid transaction.') })
+      return null
+    }
+    const normalized = result.data
+    const { accounts, buckets } = get()
+    if (normalized.accountId && !accounts.some((item) => item.id === normalized.accountId)) {
+      set({ error: 'Choose an account that still exists.' })
+      return null
+    }
+    if (normalized.toAccountId && !accounts.some((item) => item.id === normalized.toAccountId)) {
+      set({ error: 'Choose a destination account that still exists.' })
+      return null
+    }
+    if (normalized.bucketId && !buckets.some((item) => item.id === normalized.bucketId)) {
+      set({ error: 'Choose a bucket that still exists.' })
+      return null
+    }
+    if (normalized.toBucketId && !buckets.some((item) => item.id === normalized.toBucketId)) {
+      set({ error: 'Choose a destination bucket that still exists.' })
+      return null
+    }
+    return normalized
+  }
+
   function syncLedgerCache() {
     const { accounts, groups, buckets, events } = get()
     queryClient.setQueriesData({ queryKey: ['ledger'] }, { accounts, groups, buckets, events })
@@ -93,18 +138,30 @@ export const useLedger = create<LedgerState>((set, get) => {
     clearError: () => set({ error: null }),
 
     addAccount: async (name, type, openingBalanceCents = 0) => {
-      const account = { id: crypto.randomUUID(), name, type, sortOrder: nextOrder(get().accounts), archived: false }
+      const input = accountInputSchema.safeParse({ name, type, openingBalanceCents })
+      if (!input.success) {
+        set({ error: firstIssueMessage(input.error, 'Enter valid account details.') })
+        return { account: null, openingBalanceSaved: false }
+      }
+      const accountName = input.data.name
+      const accountType = input.data.type
+      const startingBalance = input.data.openingBalanceCents
+      if (hasNameConflict(get().accounts, accountName)) {
+        set({ error: 'An account with that name already exists.' })
+        return { account: null, openingBalanceSaved: false }
+      }
+      const account = { id: crypto.randomUUID(), name: accountName, type: accountType, sortOrder: nextOrder(get().accounts), archived: false }
       try {
-        const saved = await repo.createAccount({ id: account.id, name, type, sortOrder: account.sortOrder })
+        const saved = await repo.createAccount({ id: account.id, name: accountName, type: accountType, sortOrder: account.sortOrder })
         let openingEvent: LedgerEvent | null = null
-        if (openingBalanceCents !== 0) {
+        if (startingBalance !== 0) {
           try {
             openingEvent = await repo.createEvent(makeEvent({
               type: 'adjustment',
               date: todayString(),
-              amountCents: Math.abs(openingBalanceCents),
+              amountCents: Math.abs(startingBalance),
               accountId: saved.id,
-              direction: openingBalanceCents > 0 ? 'in' : 'out',
+              direction: startingBalance > 0 ? 'in' : 'out',
               description: 'Opening balance',
             }))
           } catch (error) {
@@ -132,6 +189,12 @@ export const useLedger = create<LedgerState>((set, get) => {
     updateAccount: (id, patch) => {
       const previous = get().accounts.find((item) => item.id === id)
       if (!previous) return Promise.resolve(false)
+      const parsedPatch = accountPatchSchema.safeParse(patch)
+      if (!parsedPatch.success) return Promise.resolve(rejectInput(firstIssueMessage(parsedPatch.error)))
+      patch = parsedPatch.data
+      if (patch.name !== undefined && hasNameConflict(get().accounts, patch.name, id)) {
+        return Promise.resolve(rejectInput('An account with that name already exists.'))
+      }
       return run(async () => {
         const saved = await repo.updateAccount(id, patch)
         set((s) => ({ accounts: s.accounts.map((item) => item.id === id ? saved : item).sort(byOrder) }))
@@ -156,6 +219,10 @@ export const useLedger = create<LedgerState>((set, get) => {
     },
 
     addGroup: (name, color = null) => {
+      const input = groupInputSchema.safeParse({ name, color })
+      if (!input.success) return Promise.resolve(rejectInput(firstIssueMessage(input.error, 'Enter valid group details.')))
+      name = input.data.name
+      color = input.data.color
       const group = { id: crypto.randomUUID(), name, sortOrder: nextOrder(get().groups), color }
       return run(async () => {
         const saved = await repo.createGroup({ id: group.id, name, sortOrder: group.sortOrder, color })
@@ -168,6 +235,9 @@ export const useLedger = create<LedgerState>((set, get) => {
     updateGroup: (id, patch) => {
       const previous = get().groups.find((item) => item.id === id)
       if (!previous) return Promise.resolve(false)
+      const parsedPatch = groupPatchSchema.safeParse(patch)
+      if (!parsedPatch.success) return Promise.resolve(rejectInput(firstIssueMessage(parsedPatch.error)))
+      patch = parsedPatch.data
       return run(async () => {
         const saved = await repo.updateGroup(id, patch)
         set((s) => ({ groups: s.groups.map((item) => item.id === id ? saved : item).sort(byOrder) }))
@@ -189,6 +259,15 @@ export const useLedger = create<LedgerState>((set, get) => {
     },
 
     addBucket: (input) => {
+      const parsedInput = bucketInputSchema.safeParse(input)
+      if (!parsedInput.success) return Promise.resolve(rejectInput(firstIssueMessage(parsedInput.error, 'Enter valid bucket details.')))
+      input = parsedInput.data
+      if (input.groupId && !get().groups.some((group) => group.id === input.groupId)) {
+        return Promise.resolve(rejectInput('Choose a group that still exists.'))
+      }
+      if (hasNameConflict(get().buckets, input.name)) {
+        return Promise.resolve(rejectInput('A bucket with that name already exists.'))
+      }
       const bucket = { ...input, id: crypto.randomUUID(), sortOrder: nextOrder(get().buckets), archived: false }
       return run(async () => {
         const saved = await repo.createBucket({ ...input, id: bucket.id, sortOrder: bucket.sortOrder })
@@ -201,6 +280,18 @@ export const useLedger = create<LedgerState>((set, get) => {
     updateBucket: (id, patch) => {
       const previous = get().buckets.find((item) => item.id === id)
       if (!previous) return Promise.resolve(false)
+      const parsedPatch = bucketPatchSchema.safeParse(patch)
+      if (!parsedPatch.success) return Promise.resolve(rejectInput(firstIssueMessage(parsedPatch.error)))
+      patch = parsedPatch.data
+      const merged = bucketInputSchema.safeParse({ ...previous, ...patch })
+      if (!merged.success) return Promise.resolve(rejectInput(firstIssueMessage(merged.error, 'Enter valid bucket details.')))
+      patch = { ...patch, ...merged.data }
+      if (patch.groupId && !get().groups.some((group) => group.id === patch.groupId)) {
+        return Promise.resolve(rejectInput('Choose a group that still exists.'))
+      }
+      if (patch.name !== undefined && hasNameConflict(get().buckets, patch.name, id)) {
+        return Promise.resolve(rejectInput('A bucket with that name already exists.'))
+      }
       return run(async () => {
         const saved = await repo.updateBucket(id, patch)
         set((s) => ({ buckets: s.buckets.map((item) => item.id === id ? saved : item).sort(byOrder) }))
@@ -223,6 +314,9 @@ export const useLedger = create<LedgerState>((set, get) => {
     },
 
     addEvent: (event) => {
+      const normalized = normalizeEvent(event)
+      if (!normalized) return Promise.resolve(false)
+      event = normalized
       const optimisticId = crypto.randomUUID()
       const optimisticEvent = { ...event, id: optimisticId }
       return run(async () => {
@@ -235,6 +329,13 @@ export const useLedger = create<LedgerState>((set, get) => {
 
     addEvents: (events) => {
       if (events.length === 0) return Promise.resolve(true)
+      const normalizedEvents: NewEvent[] = []
+      for (const event of events) {
+        const normalized = normalizeEvent(event)
+        if (!normalized) return Promise.resolve(false)
+        normalizedEvents.push(normalized)
+      }
+      events = normalizedEvents
       const optimisticEvents = events.map((event) => ({ ...event, id: crypto.randomUUID() }))
       const optimisticIds = new Set<string>(optimisticEvents.map((event) => event.id))
       return run(async () => {
@@ -248,6 +349,9 @@ export const useLedger = create<LedgerState>((set, get) => {
     editEvent: (id, event) => {
       const previous = get().events.find((item) => item.id === id)
       if (!previous) return Promise.resolve(false)
+      const normalized = normalizeEvent(event)
+      if (!normalized) return Promise.resolve(false)
+      event = normalized
       const optimisticEvent = { ...event, id }
       return run(async () => {
         const saved = await repo.updateEvent(id, event)

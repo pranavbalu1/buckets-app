@@ -1,15 +1,17 @@
 /** Parse user input like "72.43", "$1,200", "5" into integer cents. Returns null if invalid. */
 export function parseDollars(input: string): number | null {
-  const s = input.trim().replace(/[$,\s]/g, '')
-  const m = /^(\d+)(?:\.(\d{1,2}))?$/.exec(s)
+  const s = input.trim()
+  const normalized = s.startsWith('$') ? s.slice(1) : s
+  const m = /^((?:\d{1,3}(?:,\d{3})+)|\d+)(?:\.(\d{1,2}))?$/.exec(normalized)
   if (!m) return null
-  const cents = Number(m[1]) * 100 + Number((m[2] ?? '').padEnd(2, '0'))
+  const wholeDollars = Number(m[1]?.replaceAll(',', ''))
+  const cents = wholeDollars * 100 + Number((m[2] ?? '').padEnd(2, '0'))
   return Number.isSafeInteger(cents) ? cents : null
 }
 
 /** Like parseDollars, but allows a leading + or -. Returns null if invalid or zero. */
 export function parseSignedDollars(input: string): number | null {
-  const s = input.trim()
+  const s = input.trim().replace(/\s+/g, '')
   const negative = s.startsWith('-')
   const cents = parseDollars(s.replace(/^[+-]/, ''))
   if (cents === null || cents === 0) return null
