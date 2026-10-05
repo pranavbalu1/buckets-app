@@ -14,10 +14,25 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { computeBalances } from '../../domain/balances'
 import { formatCents } from '../../domain/money'
+import { Card } from '../../components'
 import { TABS } from '../../nav'
 import type { Tab } from '../../nav'
 import { useLedger } from '../../storage/store'
 import BrandMark from './BrandMark'
+import profileAvatar from '../../assets/demo-profile-avatar.jpg'
+
+function ProfileCard({ name, email }: { name: string; email: string }) {
+  return (
+    <Card className="flex min-w-0 items-center gap-3 border-line p-2.5 shadow-none">
+      <img src={profileAvatar} alt="Demo cat profile" className="size-11 shrink-0 rounded-full object-cover ring-2 ring-accent/25" />
+      <div className="min-w-0 flex-1">
+        <p className="text-[10px] font-semibold tracking-[0.12em] text-muted uppercase">Profile</p>
+        <p className="truncate text-sm font-semibold text-ink" title={name}>{name}</p>
+        <p className="truncate text-xs text-muted" title={email}>{email}</p>
+      </div>
+    </Card>
+  )
+}
 
 const tabIcons: Record<Tab, LucideIcon> = {
   Dashboard: LayoutDashboard,
@@ -36,6 +51,8 @@ export default function Sidebar({
   onToggleMoveMode,
   onOpenCommandMenu,
   onLogout,
+  userName,
+  userEmail,
 }: {
   tab: Tab
   onNavigate: (tab: Tab) => void
@@ -44,6 +61,8 @@ export default function Sidebar({
   onToggleMoveMode: () => void
   onOpenCommandMenu: () => void
   onLogout: () => void
+  userName: string
+  userEmail: string
 }) {
   const accounts = useLedger((state) => state.accounts)
   const events = useLedger((state) => state.events)
@@ -63,8 +82,12 @@ export default function Sidebar({
             <span className="block text-[10px] font-medium tracking-[0.15em] text-muted uppercase">Money, with intention</span>
           </div>
         </div>
-        <button className="rounded-lg px-2 py-1 text-xs font-medium text-muted hover:bg-sunken hover:text-ink md:hidden" onClick={onLogout}>
-          Log out
+      </div>
+
+      <div className="space-y-2 border-b border-line px-3 pb-3 md:hidden">
+        <ProfileCard name={userName} email={userEmail} />
+        <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-sunken hover:text-ink" onClick={onLogout}>
+          <LogOut className="size-4" /> Sign out
         </button>
       </div>
 
@@ -145,6 +168,7 @@ export default function Sidebar({
       </div>
 
       <div className="hidden border-t border-line p-4 md:block">
+        <ProfileCard name={userName} email={userEmail} />
         <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-sunken hover:text-ink" onClick={onLogout}>
           <LogOut className="size-4" /> Sign out
         </button>

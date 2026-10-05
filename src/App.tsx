@@ -199,6 +199,11 @@ function WorkspaceLayout({
 }) {
   const location = useLocation()
   const navigate = useNavigate()
+  const userEmail = session.user.email ?? ''
+  const metadataName = session.user.user_metadata?.full_name
+  const userName = typeof metadataName === 'string' && metadataName.trim()
+    ? metadataName.trim()
+    : userEmail.split('@')[0] || 'Your profile'
   const [addKind, setAddKind] = useState<AddKind | null>(null)
   const [commandOpen, setCommandOpen] = useState(false)
   const [moveMode, setMoveMode] = useState(false)
@@ -275,6 +280,8 @@ function WorkspaceLayout({
       <div className="min-h-screen bg-canvas md:flex">
         <Sidebar
           tab={tab}
+          userName={userName}
+          userEmail={userEmail}
           onNavigate={navigateTab}
           onAdd={() => setAddKind('expense')}
           moveMode={moveMode}

@@ -1,181 +1,405 @@
-# Buckets
+# Buckets user guide
 
-A private, manual-entry budgeting app built around envelope budgeting. Track account balances, assign income to buckets, follow rollover from month to month, review spending, and see how money moved through a selected week, month, or year.
+Buckets is a manual-entry envelope budgeting app. Use accounts to represent where
+your money is held, buckets to represent what your money is for, and ledger events
+to record every movement.
 
-For a complete walkthrough of the user-facing features, see the [Buckets user guide](USER_GUIDE.md). This README covers technical setup, migrations, development, and deployment.
+## Before you begin
 
-The app is a static React front end backed by Supabase Postgres and Auth. It does not connect to banks, store receipts, use a custom server, or send analytics to third parties. All money values are stored as integer cents; balances and reports are derived from ledger events.
+Buckets does not connect to banks or import transactions automatically. You enter
+your accounts and transactions manually. Create a backup before importing data,
+deleting an account, or making a large correction.
 
-The visual theme follows the included UI library: charcoal surfaces with electric lime, cyan, and emerald accents. The shipped Gilroy font files are used throughout the application.
+## Sign in and navigate
 
-The reusable UI library lives in [`src/components`](src/components/README.md). It has a public barrel export, self-contained theme stylesheet, and no finance-app or Supabase imports, so the folder can be copied into another Tailwind v4 project.
+1. Open the Buckets site.
+2. Choose **Create account** to register with your name, email, and password, or
+   sign in with an existing account.
+3. If email confirmation is enabled for the Supabase project, follow the link in
+   your confirmation email before signing in.
+   Registration requires the project's Supabase Email provider to allow new
+   users; confirmation behavior follows that project's Auth settings.
+4. Use the navigation to open:
+   - **Dashboard** for a monthly overview and quick actions.
+   - **Budget** for monthly bucket planning.
+   - **Transactions** for the ledger.
+   - **Analytics** for charts and money-flow reports.
+   - **Accounts** for account balances and account management.
+   - **Settings** for backups, recurring plans, paycheck templates,
+     reconciliation, and appearance.
+5. The sidebar profile card shows the account name and email. Its cat photo is a
+   decorative demo avatar, not a profile photo uploaded by the user.
+6. On desktop, the sidebar shows active account balances.
+7. On smaller screens, the navigation can be scrolled horizontally.
 
-## Features
+Use **New transaction** in the sidebar to open the quick-entry form. Press `N`
+when the workspace is focused. Press `Ctrl+K` on Windows/Linux or `⌘K` on macOS
+to search pages and common actions.
 
-- Email and password sign-in with a persistent Supabase session.
-- Checking, savings, cash, credit card, and other accounts with opening balances, history, editing, archive, and ordering.
-- Grouped buckets with monthly targets, savings goals, allocations, and bucket-to-bucket moves.
-- Monthly planning with prior-month rollover, income, net funding, spending, and available money. Each bucket can expand to show the month-end balance formula, want shortfall or overage, goal progress, remaining amount, and target-date projection where applicable.
-- Transactions with add, edit, delete, category selection, optional custom transaction labels, text search, and date, account, bucket, type, and amount filters.
-- Weekly, monthly, and yearly activity views with reusable stacked-bar, semicircle category, and area-line charts; includes income sources, spending by bucket, savings contributions and rate, largest expenses, and budget gauges for total, a selected group, and a selected bucket.
-- A period-based Sankey diagram for income, available money, groups, buckets, spending, unspent balances, and unallocated money.
-- Recurring plans that wait for confirmation before an event is added to the ledger.
-- Paycheck templates that add an income event and its bucket assignments together.
-- Account reconciliation that records the comparison and can add a balancing adjustment without rewriting history.
-- A full JSON export and restore flow, with a 30-day export reminder stored on the current browser/device.
-- Dark and light appearance preferences, saved locally in the current browser.
-- A searchable command menu for page navigation, common money actions, and appearance settings (`Ctrl+K` or `⌘K`).
+## Recommended first-time setup
 
-## Stack
+### 1. Add your accounts
 
-- React, TypeScript, React Router, Vite, and Tailwind CSS
-- Zustand for ledger state and TanStack Query for server data fetching/cache
-- Supabase Postgres, Auth, and row-level security
-- Zod validation and date-fns calendar-date handling
-- Recharts and d3-sankey
-- Vitest domain and mapper tests
+Open **Accounts** and create each place where you hold money, such as checking,
+savings, cash, or a credit card.
 
-## Local setup
+For each account:
 
-### 1. Create Supabase project and user
+1. Enter a unique name.
+2. Choose the account type.
+3. Enter the current opening balance. Use a minus sign for a credit-card debt or
+   another negative balance.
+4. Save the account.
 
-Create a free Supabase project. In **Authentication → Users**, create your single user with the email/password you will use to sign in. Then disable public sign-ups under **Authentication → Providers → Email** (the label can differ slightly as the Supabase dashboard changes). This app intentionally has no registration page.
+The opening balance is recorded as an adjustment event so the account balance
+remains derived from the ledger.
 
-### 2. Create the schema
+You can:
 
-Run every SQL migration in `supabase/migrations/` in numeric order in the Supabase SQL Editor:
+- Edit account details.
+- Drag accounts to change their order.
+- Open account history.
+- Archive an account to hide it from normal entry screens without deleting its
+  history.
+- Turn on **Show archived** to view archived accounts.
+- Delete an account and its linked records. This is permanent and requires
+  confirmation.
 
-1. `001_core.sql`
-2. `002_bucket_targets.sql`
-3. `003_bucket_types_and_group_colors.sql`
-4. `004_bucket_goal_fields.sql`
-5. `005_income_streams.sql`
-6. `006_account_sort_order.sql`
-7. `007_planning_reconciliation_backups.sql`
-8. `008_transaction_labels.sql`
-9. `009_developer_tools.sql`
-10. `010_account_deletion.sql`
-11. `011_unique_account_and_bucket_names.sql`
+Account names must be unique for your user, including archived accounts.
 
-The migrations enable RLS on every app table. Migration 007 upgrades existing monthly income streams to confirm-before-post recurring plans and creates the reconciliation and atomic backup-restore functions. Migration 008 adds optional custom transaction labels and keeps them in backup restores. Migration 009 adds the development-only reset RPC, which atomically clears finance data belonging to the signed-in user while preserving their Supabase Auth account. Migration 010 adds atomic account deletion for the signed-in user and its linked records. Migration 011 makes account and bucket names unique per user, renaming later existing duplicates with a numeric suffix before creating the unique indexes. For a new project, apply the full sequence once. Back up data before applying schema changes to an existing project.
+### 2. Create your buckets
 
-### 3. Configure the browser client
+Open **Budget** and add buckets for the jobs your money needs to do. You can
+organize buckets into groups such as Housing, Food, Transportation, or Savings.
 
-Copy `.env.example` to `.env.local` and set the project URL and **publishable/anon** key from Supabase project API settings:
+For each bucket, you can configure:
 
-```dotenv
-VITE_SUPABASE_URL=https://YOUR-PROJECT.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-or-publishable-key
-```
+- A bucket name and group.
+- A bucket kind: spending, savings, or obligation.
+- A monthly target.
+- A savings target amount.
+- A target date.
+- A custom color.
+- An archived state.
 
-The browser key is public by design; row-level security is the boundary protecting data. Never put a Supabase `service_role` key in a `VITE_` variable, source file, or static-host setting. The optional private-backup workflow uses it only as an encrypted GitHub Actions secret; it must never be exposed in logs or bundled into the app.
+Bucket names must be unique for your user, including archived buckets.
 
-### 4. Run locally
+### 3. Record income
 
-```sh
-npm install
-npm run dev
-```
+Use **New transaction → Income** or **Deposit**:
 
-During local development, type `/devtools` in the address bar to open the private health dashboard. It has no link in the app navigation and is omitted from production builds. The page can diagnose missing Supabase configuration before sign-in; authenticate to verify RLS access or use its reset action. It checks app/browser readiness, Supabase Auth, access to the expected schema, and local storage. The reset requires typing a confirmation phrase and a second browser confirmation; it deletes only the current user's finance data and keeps the login. Apply migration `009_developer_tools.sql` before using that action.
+1. Enter the date and amount.
+2. Choose the account receiving the money.
+3. Add an optional description, payee, notes, or custom label.
+4. Save the event.
 
-### Deploy to Vercel
+Income increases the selected account. It becomes available for allocation in
+the corresponding budget month.
 
-Push the project to GitHub, import its repository from Vercel, and keep the project root at `/`. Vercel detects Vite; the build command is `npm run build` and the output directory is `dist`. The included `vercel.json` rewrites direct React Router URLs such as `/budget` and `/accounts` to the app entry page.
+### 4. Assign income to buckets
 
-Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to the Vercel project's Environment Variables for Production (and Preview if you want preview deployments connected to Supabase). Use the project URL and publishable/anon key from Supabase API settings. These `VITE_` values are included in browser code, so only use the publishable/anon key; never use a service-role/secret key here. Apply every pending migration in `supabase/migrations/` to the matching Supabase project before using the deployed app. Set Supabase Auth's Site URL to your production Vercel domain. Add the production and any required preview domains to its allowed redirect URLs.
+Use **New transaction → Allocation** from the relevant budget month:
 
-### Ready-to-import JSON demo
+1. Choose the bucket.
+2. Choose the month.
+3. Enter the amount.
+4. Choose whether money is being added to or returned from the bucket.
+5. Save the allocation.
 
-[`examples/demo-finance-backup.json`](examples/demo-finance-backup.json) is a synthetic, ready-to-import backup with checking, savings, cash, and credit-card accounts; grouped and ungrouped buckets; savings goals; 295 ledger events; transaction labels; all ledger event types; recurring plans; paycheck templates; and a linked account reconciliation. It includes one intentional small overspend to demonstrate the budget alert. Its activity covers the months leading up to October 2026 so the dashboard, Budget, Transactions, Accounts, Analytics, Sankey, and planning views have useful data to explore.
+Buckets prevent allocating more money than is available. Returning money also
+cannot exceed the amount available in that bucket.
 
-To load it, sign in to a development or demo account, open **Settings → Import JSON**, select that file, and confirm. Import replaces the account's existing finance and planning data, but keeps its login. The entries are fictitious. To recreate the file after editing its source, run `node scripts/create-demo-backup.mjs`.
+## Recording everyday activity
 
-### Optional demo data
+### Expenses
 
-The repeatable demo seeder creates a populated set of accounts, groups, buckets, six months of ledger activity, recurring plans, a paycheck template, and a reconciliation. Use a dedicated demo Auth user in a development Supabase project. The script uses a service-role key, adds/upserts only its deterministic demo records, and does not delete existing rows.
+Choose **New transaction → Expense**:
 
-```sh
-cp .env.demo.example .env.demo
-# Set the project URL, private service-role key, dedicated Auth user UUID, and confirmation in .env.demo.
-npm run seed:demo
-```
+1. Select the account that paid.
+2. Select the bucket the expense belongs to.
+3. Enter the amount and date.
+4. Add a description, payee, notes, or custom transaction label if useful.
+5. Save.
 
-Keep `.env.demo` private. Do not use a production account or put the service-role key in a `VITE_` variable. Apply all migrations through `009_developer_tools.sql` before running the seeder.
+An expense reduces the account and bucket balances.
 
-To produce the static site locally:
+### Moving money between buckets
 
-```sh
-npm run build
-npm run preview
-```
+Choose **New transaction → Move money**:
 
-Other project commands are `npm run lint` and `npm test`.
+1. Select the source bucket.
+2. Select the destination bucket.
+3. Enter the amount and date.
+4. Save.
 
-## Supabase security checklist
+The source and destination must be different buckets.
 
-Before putting the site on the public internet:
+### Transferring money between accounts
 
-1. Create your account directly in the Supabase dashboard.
-2. Disable public email sign-ups after that account exists.
-3. Confirm RLS is enabled on `accounts`, `bucket_groups`, `buckets`, `ledger_events`, `income_streams`, `recurring_plans`, `paycheck_templates`, and `reconciliations`.
-4. Confirm each table has an authenticated-only owner policy using `user_id = auth.uid()` for reads and writes. The `restore_ledger`, `record_reconciliation`, and `complete_recurring_plan` functions run as the caller and use that caller's identity.
-5. Check unauthenticated access using the project URL and anon key. The request should return no user rows (usually HTTP 200 with `[]`):
+Choose **New transaction → Transfer**:
 
-   ```sh
-   curl -i \
-     -H "apikey: YOUR_ANON_KEY" \
-     "https://YOUR-PROJECT.supabase.co/rest/v1/accounts?select=id"
-   ```
+1. Select the source account.
+2. Select the destination account.
+3. Enter the amount and date.
+4. Save.
 
-6. Sign in through the app and verify your own rows load. If the unauthenticated request returns account data, stop and repair RLS before using the deployment.
-7. Search the repository and deployment environment to make sure no service-role key is in source code, build output, or a `VITE_` variable. If scheduled backups are enabled, keep that key only in the encrypted `SUPABASE_SERVICE_ROLE_KEY` Actions secret.
+An account transfer changes where money is held without changing the overall
+amount of money.
 
-See [`docs/security-checklist.md`](docs/security-checklist.md) for the same checks in release form.
+### Deposits and adjustments
 
-## Backups and free-tier pause behavior
+- Use **Deposit** for income entering an account.
+- Use **Adjustment** for a deliberate balance correction, such as correcting a
+  starting balance or recording a reconciliation difference.
+- Adjustments require a direction: money in or money out.
 
-Use **Settings → Export JSON** regularly and keep the downloaded file in a private location. The backup contains ledger and planning data, so treat it as sensitive. Settings shows when this browser last exported and reminds you after 30 days. The timestamp is local to that browser; it does not sync between devices.
+## Dashboard
 
-Import replaces all ledger and planning rows for the signed-in user in one database transaction. It cannot be undone. Export the current data first if you might need to restore it later.
+The **Dashboard** provides a quick view of the selected month:
 
-Supabase free projects can pause after inactivity. The optional GitHub Actions keep-alive workflow in `.github/workflows/supabase-keepalive.yml` sends a lightweight request every five days. Add repository Actions secrets `SUPABASE_URL` and `SUPABASE_ANON_KEY` to enable it. If the project is already paused, resume it in the Supabase dashboard; the workflow cannot resume a paused project.
+- Available money and budget progress.
+- Income, spending, and savings totals.
+- Recent activity.
+- Cash-flow bars.
+- Shortcuts to add a transaction, review the budget, or manage accounts.
 
-An optional weekly job in `.github/workflows/supabase-backup.yml` exports one user's complete backup and stores it as a 30-day GitHub Actions artifact. It refuses to run unless the repository is private. To enable it, add `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_USER_ID` as encrypted repository Actions secrets. The service-role key bypasses RLS, so restrict repository and workflow access, protect the default branch, and never reuse that secret in the frontend or static-host settings. Download and retain important artifacts privately before they expire.
+Use the month controls to move between planning periods. Dashboard values are
+calculated from the ledger rather than entered separately.
 
-The CI workflow in `.github/workflows/ci.yml` runs lint, domain tests, and the production build on pushes and pull requests.
+## Monthly budgeting
 
-## Static deployment
+The **Budget** page is where you give every dollar a job.
 
-Deploy the Vite output directory `dist` to Cloudflare Pages, Netlify, or Vercel. Set these two build environment variables in the host:
+For the selected month:
 
-- `VITE_SUPABASE_URL`
-- `VITE_SUPABASE_ANON_KEY`
+- Review income, allocations, spending, and available money.
+- Expand a bucket to see its month-end balance calculation.
+- Compare actual funding with the monthly target.
+- Review want shortfalls or overages.
+- Track savings-goal progress.
+- Review remaining amounts and target-date projections.
+- Use archived-bucket controls when you need to inspect older categories.
 
-Configure the host's SPA fallback so direct visits to `/dashboard`, `/budget`, `/transactions`, `/accounts`, `/analytics`, and `/settings` resolve to `index.html`. Navigation uses React Router in the browser and needs no server-side functions. GitHub Pages is not configured; a static host with free private-repository support is the intended deployment.
+Create or edit a bucket from the budget controls. Use allocation events to move
+money into or out of buckets; do not manually change derived balances.
 
-## Data and budgeting notes
+### Rollover
 
-- Ledger events are the source of truth. Account totals, bucket balances, available money, rollover, analytics, and Sankey inputs are computed from events.
-- Allocation events take effect in their selected budget month. Other ledger events use their calendar date.
-- Leftover and overspent bucket balances carry into later months. The Budget page shows each bucket's opening balance, assignments, moves, spending, and month-end available balance. Its expanded calculation uses `opening + net assignments + moves in - moves out - spending`; savings goals include remaining-to-goal and date progress, while date-based monthly plans show an estimate that assumes no spending or withdrawals.
-- Credit cards are accounts that can carry a negative balance. A card payment is an account transfer; it is not spending a second time.
-- Reconciliation adds an adjustment event when requested. It does not change earlier transactions.
-- Recurring plans only create an event after you confirm a due occurrence. Skipping advances the schedule without making a ledger entry.
-- Savings contributions are net allocations and bucket moves into buckets marked as savings, divided by income for the savings rate.
-- Sankey visualizations use real period data and aggregate flows. The ledger does not record which particular income dollar funded a particular bucket, so the diagram does not claim individual-dollar tracing.
+Bucket balances can carry from one month to the next. Review the prior-month
+balance before allocating new income so you do not allocate money twice.
 
-## Repository map
+## Transactions
 
-```text
-src/domain/       Pure ledger, budget, and analytics calculations
-src/features/     Dashboard, budget, transactions, analytics, accounts, settings
-src/storage/      Repository adapter, Supabase mappings, backup schema and download
-src/components/  Portable UI components, theme tokens, and showcase examples
-src/app/         App-specific navigation, page skeletons, and money formatting
-src/features/analytics/  Finance-data Sankey diagram
-supabase/migrations/  Database schema, constraints, RLS, and database functions
-docs/             Security and release checklist
-```
+The **Transactions** page contains the full ledger.
 
-Keep real user data and secrets out of the repository. The included JSON file is explicitly synthetic; never commit `.env.local`, private backups, personal ledger exports, or credentials.
+You can:
+
+- Search descriptions, payees, notes, and custom labels.
+- Filter by date range.
+- Filter by account.
+- Filter by bucket.
+- Filter by event type.
+- Filter by amount.
+- Edit an existing transaction.
+- Delete a transaction.
+- Open the account or bucket associated with an event.
+
+Use consistent descriptions and payees so search and analytics remain useful.
+Custom transaction labels are optional and can be up to 40 characters.
+
+## Analytics and money flow
+
+Open **Analytics** to review activity over a selected week, month, or year.
+
+Available views include:
+
+- Income sources.
+- Spending by bucket.
+- Savings contributions and savings rate.
+- Largest expenses.
+- Total budget gauges.
+- A selected group budget gauge.
+- A selected bucket budget gauge.
+- Stacked activity bars.
+- Category and area-line charts.
+- A Sankey diagram showing how money moved from income through available money,
+  groups, buckets, spending, unspent balances, and unallocated money.
+
+Use group and bucket selectors to focus the budget gauges. Use the date range
+controls to compare different periods. Charts are derived from the same ledger
+used by the Dashboard and Budget pages.
+
+## Recurring plans
+
+Open **Settings** and find **Recurring plans** to schedule expected activity.
+
+Supported plan types:
+
+- Income.
+- Expense.
+- Account transfer.
+- Bucket move.
+
+When creating a plan:
+
+1. Enter a name.
+2. Choose the transaction type.
+3. Enter the amount.
+4. Choose weekly, every two weeks, monthly, or yearly frequency.
+5. Choose the first occurrence date.
+6. Optionally choose an end date.
+7. Select the accounts or buckets involved.
+8. Save the plan.
+
+Recurring plans do not automatically add events to the ledger. When the next
+occurrence is due, it appears as **Pending**:
+
+- **Confirm** posts the event and advances the next occurrence.
+- **Skip** advances the schedule without posting an event.
+- **Pause** stops future pending occurrences.
+- **Resume** reactivates a paused plan.
+- **Delete** removes the plan.
+
+Review pending plans regularly so expected bills and income do not remain
+unrecorded.
+
+## Paycheck templates
+
+Open **Settings** and find **Paycheck templates** to save a repeatable paycheck
+allocation.
+
+To create one:
+
+1. Enter a template name.
+2. Choose the account receiving the paycheck.
+3. Enter bucket allocations.
+4. Save the template.
+
+To use one:
+
+1. Enter the paycheck amount and date.
+2. Select the account.
+3. Choose the saved template.
+4. Review the allocation preview.
+5. Apply it.
+
+The action creates the income event and its bucket allocations together. Check
+that the allocations are appropriate before confirming.
+
+## Account reconciliation
+
+Use **Settings → Reconciliation** to compare an account with a statement.
+
+1. Choose an active account.
+2. Enter the statement date.
+3. Enter the statement balance.
+4. Review the app's calculated balance and difference.
+5. Choose whether to post a balancing adjustment.
+6. Save the reconciliation.
+
+Reconciliation records the comparison without rewriting previous transactions.
+If an adjustment is posted, it appears as a separate ledger event.
+
+## Backups and restore
+
+Open **Settings → Your data and backups**.
+
+### Export
+
+Click **Export JSON** to download a portable backup containing:
+
+- Accounts.
+- Bucket groups and buckets.
+- Ledger events.
+- Recurring plans.
+- Paycheck templates.
+- Reconciliation history.
+
+Export regularly. The app records the last export date on the current browser
+and shows a reminder after 30 days.
+
+### Import
+
+1. Export a current backup first.
+2. Click **Import JSON**.
+3. Select a Buckets backup file.
+4. Read the replacement warning.
+5. Confirm only if you intend to replace the current finance and planning data.
+
+Import replaces the current user's accounts, buckets, events, plans, templates,
+and reconciliation history. It does not replace the login. Do not close the
+browser while the restore is running.
+
+## Appearance and accessibility
+
+Open **Settings → Appearance** and choose:
+
+- **Dark - library palette**
+- **Light - accessible contrast**
+
+The preference is saved on the current browser/device. It does not change other
+devices or users.
+
+The app uses semantic colors for charts, progress bars, alerts, and controls.
+Do not rely on color alone when reading a chart; use the displayed labels and
+values as well.
+
+## Command menu
+
+Press `Ctrl+K` on Windows/Linux or `⌘K` on macOS, or click **Search pages and
+actions** in the sidebar.
+
+Use it to:
+
+- Navigate to a page.
+- Open common money actions.
+- Switch between appearance themes.
+
+Press `Escape` to close the menu.
+
+## Troubleshooting
+
+### The app cannot load data
+
+Check that:
+
+- You are signed in.
+- The Supabase project URL and publishable/anon key are configured.
+- The required migrations have been applied in numeric order.
+- The browser has an internet connection.
+
+Refresh the page and retry. If the error continues, open the development-only
+`/devtools` route when running a local development build to inspect configuration,
+authentication, schema access, and local storage.
+
+### A record cannot be created
+
+Check that:
+
+- The amount is greater than zero.
+- Required accounts or buckets are selected.
+- Source and destination records are different for transfers and moves.
+- The name is not already used by another account or bucket.
+- The allocation does not exceed available money.
+
+### A migration says an object already exists
+
+Do not drop the table or delete user data. Back up first, then use the corrected
+migration for the project state and inspect the existing schema before applying
+additional changes.
+
+### The favicon does not change
+
+Browsers cache favicons aggressively. Use a PNG or ICO asset, update the favicon
+URL with a new filename or query string, redeploy, and hard-refresh or reopen the
+tab.
+
+## Safe-use checklist
+
+- Export a backup before imports, deletions, or schema changes.
+- Use a separate demo account for sample data.
+- Never share your password or private service-role key.
+- Never put a Supabase service-role key in a `VITE_` environment variable.
+- Review pending recurring plans.
+- Reconcile important accounts regularly.
+- Verify the selected month before allocating money.

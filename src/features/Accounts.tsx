@@ -169,7 +169,7 @@ export default function Accounts() {
             <h2 className="mt-1 text-lg font-semibold tracking-tight">Add an account</h2>
             <p className="mt-1 text-sm text-muted">Track the places where you keep your money.</p>
           </div>
-          <form onSubmit={(event) => void submit(event)} className="grid gap-3 sm:grid-cols-[minmax(0,1.25fr)_minmax(9rem,0.8fr)_minmax(9rem,0.8fr)_auto] sm:items-end">
+          <form onSubmit={(event) => void submit(event)} className="grid gap-3 sm:grid-cols-[minmax(0,1.25fr)_minmax(0,0.8fr)_minmax(0,0.8fr)_auto] sm:items-start">
             <FormField label="Account name" htmlFor="new-account-name" required>
               <Input id="new-account-name" className="min-w-0" placeholder="e.g. Everyday checking" value={name} disabled={Boolean(pendingOpeningBalance) || savingAccount} onChange={(event) => { setName(event.target.value); setFormError('') }} aria-invalid={Boolean(formError)} />
             </FormField>
@@ -202,7 +202,7 @@ export default function Accounts() {
                 aria-invalid={Boolean(formError)}
               />
             </FormField>
-            <Button type="submit" variant="primary" disabled={savingAccount || Boolean(pendingOpeningBalance)} className="shrink-0 sm:mb-0.5">
+            <Button type="submit" variant="primary" disabled={savingAccount || Boolean(pendingOpeningBalance)} className="shrink-0 sm:mt-[1.375rem]">
               <WalletCards className="size-4" /> {savingAccount ? 'Adding…' : 'Add account'}
             </Button>
           </form>

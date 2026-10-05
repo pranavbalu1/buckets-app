@@ -13,8 +13,13 @@ deleting an account, or making a large correction.
 ## Sign in and navigate
 
 1. Open the Buckets site.
-2. Sign in with the email and password provided for your account.
-3. Use the navigation to open:
+2. Choose **Create account** to register with your name, email, and password, or
+   sign in with an existing account.
+3. If email confirmation is enabled for the Supabase project, follow the link in
+   your confirmation email before signing in.
+   Registration requires the project's Supabase Email provider to allow new
+   users; confirmation behavior follows that project's Auth settings.
+4. Use the navigation to open:
    - **Dashboard** for a monthly overview and quick actions.
    - **Budget** for monthly bucket planning.
    - **Transactions** for the ledger.
@@ -22,8 +27,10 @@ deleting an account, or making a large correction.
    - **Accounts** for account balances and account management.
    - **Settings** for backups, recurring plans, paycheck templates,
      reconciliation, and appearance.
-4. On desktop, the sidebar shows active account balances.
-5. On smaller screens, the navigation can be scrolled horizontally.
+5. The sidebar profile card shows the account name and email. Its cat photo is a
+   decorative demo avatar, not a profile photo uploaded by the user.
+6. On desktop, the sidebar shows active account balances.
+7. On smaller screens, the navigation can be scrolled horizontally.
 
 Use **New transaction** in the sidebar to open the quick-entry form. Press `N`
 when the workspace is focused. Press `Ctrl+K` on Windows/Linux or `⌘K` on macOS

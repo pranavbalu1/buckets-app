@@ -1,36 +1,75 @@
 import { useState } from 'react'
 import { ArrowUpRight, Check, Layers3, LockKeyhole } from 'lucide-react'
-import { Button, Card, FormField, Input } from '../components'
+import { Button, Card, FormField, Input, SegmentedControl } from '../components'
 import BrandMark from '../app/components/BrandMark'
 import { z } from 'zod'
 import { supabase } from '../lib/supabase'
 import loginHero from '../assets/login-hero.jpg'
 
+const emailSchema = z.email('Enter a valid email address.').max(254, 'Email addresses must be 254 characters or fewer.')
 const signInSchema = z.object({
-  email: z.email('Enter a valid email address.').max(254, 'Email addresses must be 254 characters or fewer.'),
+  email: emailSchema,
   password: z.string().min(1, 'Enter your password.').max(256, 'Password is too long.'),
+})
+const registerSchema = z.object({
+  name: z.string().trim().min(2, 'Enter your name.').max(80, 'Name must be 80 characters or fewer.'),
+  email: emailSchema,
+  password: z.string().min(8, 'Use a password with at least 8 characters.').max(72, 'Password must be 72 characters or fewer.'),
+  confirmPassword: z.string(),
+}).refine((input) => input.password === input.confirmPassword, {
+  path: ['confirmPassword'],
+  message: 'Passwords do not match.',
 })
 
 export default function Login({ initialError = '' }: { initialError?: string }) {
   const [email, setEmail] = useState('')
+  const [name, setName] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [mode, setMode] = useState<'signin' | 'register'>('signin')
   const [error, setError] = useState(initialError)
+  const [notice, setNotice] = useState('')
   const [busy, setBusy] = useState(false)
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
     setError('')
-    const input = signInSchema.safeParse({ email: email.trim().toLowerCase(), password })
-    if (!input.success) {
-      setError(input.error.issues[0]?.message ?? 'Enter valid sign-in details.')
-      return
+    setNotice('')
+    const normalizedEmail = email.trim().toLowerCase()
+    let displayName = ''
+    if (mode === 'signin') {
+      const input = signInSchema.safeParse({ email: normalizedEmail, password })
+      if (!input.success) {
+        setError(input.error.issues[0]?.message ?? 'Enter valid sign-in details.')
+        return
+      }
+    } else {
+      const input = registerSchema.safeParse({ name, email: normalizedEmail, password, confirmPassword })
+      if (!input.success) {
+        setError(input.error.issues[0]?.message ?? 'Enter valid account details.')
+        return
+      }
+      displayName = input.data.name
     }
+
     setBusy(true)
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword(input.data)
-      if (signInError) setError(signInError.message)
-    } catch (signInError) {
-      setError(signInError instanceof Error ? signInError.message : 'Unable to sign in. Please try again.')
+      if (mode === 'signin') {
+        const { error: signInError } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password })
+        if (signInError) throw signInError
+      } else {
+        const { data, error: signUpError } = await supabase.auth.signUp({
+          email: normalizedEmail,
+          password,
+          options: { data: { full_name: displayName } },
+        })
+        if (signUpError) throw signUpError
+        setNotice(data.session
+          ? 'Your account is ready. Opening your workspace…'
+          : 'Account created. Check your email for a confirmation link before signing in.')
+      }
+    } catch (authError) {
+      setError(authError instanceof Error ? authError.message : mode === 'signin' ? 'Unable to sign in. Please try again.' : 'Unable to create your account. Please try again.')
     } finally {
       setBusy(false)
     }
@@ -97,19 +136,39 @@ export default function Login({ initialError = '' }: { initialError?: string }) 
             <div className="mb-8">
               <span className="mb-5 grid size-11 place-items-center rounded-xl bg-accent-soft text-accent"><LockKeyhole className="size-5" /></span>
               <p className="text-xs font-semibold tracking-[0.14em] text-accent uppercase">Your workspace</p>
-              <h2 className="mt-2 text-2xl font-semibold tracking-tight">Welcome back</h2>
-              <p className="mt-1.5 text-sm text-muted">Sign in to pick up where you left off.</p>
+              <h2 className="mt-2 text-2xl font-semibold tracking-tight">{mode === 'signin' ? 'Welcome back' : 'Create your account'}</h2>
+              <p className="mt-1.5 text-sm text-muted">{mode === 'signin' ? 'Sign in to pick up where you left off.' : 'Set up your personal budgeting workspace.'}</p>
             </div>
+            <SegmentedControl
+              value={mode}
+              onChange={(nextMode) => {
+                setMode(nextMode as 'signin' | 'register')
+                setError('')
+                setNotice('')
+              }}
+              options={[{ id: 'signin', label: 'Sign in' }, { id: 'register', label: 'Create account' }]}
+            />
             <form onSubmit={submit} className="space-y-5">
+              {mode === 'register' && (
+                <FormField label="Full name" htmlFor="register-name" required>
+                  <Input id="register-name" type="text" autoComplete="name" required maxLength={80} value={name} onChange={(event) => setName(event.target.value)} placeholder="Your name" className="h-11" />
+                </FormField>
+              )}
               <FormField label="Email address" htmlFor="login-email" required>
                 <Input id="login-email" type="email" autoComplete="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" className="h-11" />
               </FormField>
-              <FormField label="Password" htmlFor="login-password" required>
-                <Input id="login-password" type="password" autoComplete="current-password" required value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" className="h-11" />
+              <FormField label="Password" htmlFor="login-password" required helperText={mode === 'register' ? 'Use at least 8 characters.' : undefined}>
+                <Input id="login-password" type="password" autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} required value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Enter your password" className="h-11" />
               </FormField>
+              {mode === 'register' && (
+                <FormField label="Confirm password" htmlFor="register-confirm-password" required>
+                  <Input id="register-confirm-password" type="password" autoComplete="new-password" required value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} placeholder="Enter your password again" className="h-11" />
+                </FormField>
+              )}
               {error && <p role="alert" className="rounded-lg border border-bad/25 bg-bad-soft p-3 text-sm text-bad">{error}</p>}
+              {notice && <p role="status" className="rounded-lg border border-good/25 bg-good/10 p-3 text-sm text-good">{notice}</p>}
               <Button variant="primary" disabled={busy} className="h-11 w-full justify-between px-4">
-                <span>{busy ? 'Signing in…' : 'Sign in'}</span>
+                <span>{busy ? (mode === 'signin' ? 'Signing in…' : 'Creating account…') : mode === 'signin' ? 'Sign in' : 'Create account'}</span>
                 <ArrowUpRight className="size-4" />
               </Button>
             </form>

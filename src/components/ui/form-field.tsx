@@ -6,6 +6,7 @@ export function FormField({
   error,
   required = false,
   helperText,
+  className = '',
   children,
 }: {
   label?: string
@@ -13,6 +14,7 @@ export function FormField({
   error?: string
   required?: boolean
   helperText?: string
+  className?: string
   children: ReactNode
 }) {
   const labelId = useId()
@@ -25,7 +27,7 @@ export function FormField({
   }) : children
 
   return (
-    <div className="w-full space-y-1.5">
+    <div className={`w-full min-w-0 space-y-1.5 ${className}`}>
       {label && <label id={labelId} htmlFor={htmlFor} className="block text-xs font-semibold text-muted">{label}{required && <span aria-hidden="true"> *</span>}</label>}
       {labeledChildren}
       {helperText && !error && <p className="text-xs text-muted">{helperText}</p>}
