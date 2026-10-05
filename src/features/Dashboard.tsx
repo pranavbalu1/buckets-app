@@ -93,48 +93,48 @@ export default function Dashboard({ onAdd, onNavigate }: {
 
   return (
     <div className="space-y-6 md:space-y-8">
-      <section className="hero-panel relative overflow-hidden rounded-[1.75rem] p-6 text-white shadow-lg md:p-8">
+      <section className="hero-panel relative overflow-hidden rounded-[1.75rem] p-6 text-foreground shadow-lg md:p-8">
         <div className="relative z-10 grid gap-8 lg:grid-cols-[1.35fr_0.65fr] lg:items-end">
           <div className="max-w-2xl">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-white/85 backdrop-blur">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-border/70 bg-surface/70 px-3 py-1.5 text-xs font-medium text-foreground backdrop-blur">
               <span className="size-1.5 rounded-full bg-emerald-300" />
               {monthLabel(month)} overview
             </div>
             <h1 className="text-3xl font-semibold tracking-tight md:text-4xl">A clear plan for your money.</h1>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-white/75 md:text-base">
+            <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground md:text-base">
               {balances.unallocated >= 0 ? (
-                <>You have <strong className="font-semibold text-white">{formatCents(balances.unallocated)}</strong> ready to assign. Give it a bucket, cover a goal, or keep it flexible.</>
+                <>You have <strong className="font-semibold text-foreground">{formatCents(balances.unallocated)}</strong> ready to assign. Give it a bucket, cover a goal, or keep it flexible.</>
               ) : (
-                <>Your buckets are ahead of your accounts by <strong className="font-semibold text-white">{formatCents(-balances.unallocated)}</strong>. Review the budget to bring them back in line.</>
+                <>Your buckets are ahead of your accounts by <strong className="font-semibold text-foreground">{formatCents(-balances.unallocated)}</strong>. Review the budget to bring them back in line.</>
               )}
             </p>
             <div className="mt-6 flex flex-wrap gap-2.5">
-              <Button variant="primary" className="border-transparent bg-[#e6ff4b] text-zinc-950 shadow-sm hover:bg-[#d8f533]" onClick={() => onAdd('expense')}>
+              <Button variant="primary" className="border-transparent bg-accent text-accent-ink shadow-sm hover:opacity-90" onClick={() => onAdd('expense')}>
                 <ReceiptText className="size-4" /> Add expense
               </Button>
-              <Button className="border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={() => onNavigate('Budget')}>
+              <Button className="border-border/70 bg-surface/70 text-foreground hover:bg-sunken" onClick={() => onNavigate('Budget')}>
                 Open budget <ArrowUpRight className="size-4" />
               </Button>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/15 bg-slate-950/15 p-4 backdrop-blur-sm sm:p-5">
+          <div className="rounded-2xl border border-border/70 bg-surface/70 p-4 backdrop-blur-sm sm:p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-medium text-white/65">This month so far</p>
+                <p className="text-xs font-medium text-muted-foreground">This month so far</p>
                 <p className="mt-1 text-lg font-semibold">Cash flow</p>
               </div>
-              <span className="grid size-9 place-items-center rounded-xl bg-white/10 text-white/80">
+              <span className="grid size-9 place-items-center rounded-xl bg-sunken text-muted-foreground">
                 <ArrowLeftRight className="size-4" />
               </span>
             </div>
             <div className="mt-5 space-y-3">
-              <CashflowBar label="Income" cents={monthly.incomeCents} scale={cashflowScale} color="bg-[#e6ff4b]" />
-              <CashflowBar label="Spent" cents={monthly.spentCents} scale={cashflowScale} color="bg-[#03d791]" />
+              <CashflowBar label="Income" cents={monthly.incomeCents} scale={cashflowScale} color="var(--color-chart-1)" />
+              <CashflowBar label="Spent" cents={monthly.spentCents} scale={cashflowScale} color="var(--color-chart-3)" />
             </div>
-            <div className="mt-5 flex items-center justify-between border-t border-white/15 pt-4 text-xs">
-              <span className="text-white/65">Net this month</span>
-              <strong className="text-sm font-semibold text-white">{formatCents(monthly.incomeCents - monthly.spentCents)}</strong>
+            <div className="mt-5 flex items-center justify-between border-t border-border/70 pt-4 text-xs">
+              <span className="text-muted-foreground">Net this month</span>
+              <strong className="text-sm font-semibold text-foreground">{formatCents(monthly.incomeCents - monthly.spentCents)}</strong>
             </div>
           </div>
         </div>
@@ -241,9 +241,9 @@ function CashflowBar({ label, cents, scale, color }: { label: string; cents: num
   const width = cents > 0 ? Math.max(4, (cents / scale) * 100) : 0
   return (
     <div className="grid grid-cols-[3.5rem_1fr_auto] items-center gap-3 text-xs">
-      <span className="text-white/70">{label}</span>
-      <div className="h-2 overflow-hidden rounded-full bg-white/15">
-        <div className={`h-full rounded-full ${color}`} style={{ width: `${width}%` }} />
+      <span className="text-muted-foreground">{label}</span>
+      <div className="h-2 overflow-hidden rounded-full bg-sunken">
+        <div className="h-full rounded-full" style={{ width: `${width}%`, backgroundColor: color }} />
       </div>
       <span className="min-w-20 text-right font-semibold tabular-nums">{formatCents(cents)}</span>
     </div>

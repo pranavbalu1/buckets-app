@@ -14,8 +14,15 @@ import { formatCents } from '../domain/money'
 import { useLedger } from '../storage/store'
 import SankeyChart from '../components/ui/sankey-chart'
 
-const CHART_COLORS = ['#e6ff4b', '#00bdf9', '#03d791', '#f59e0b', '#a855f7', '#f43f5e', '#14b8a6', '#6366f1']
-const STACK_COLORS = ['bg-[#e6ff4b]', 'bg-[#b0cc29]', 'bg-[#6d8218]', 'bg-[#42500d]', 'bg-[#00bdf9]']
+const CHART_COLORS = [
+  'var(--color-chart-1)', 'var(--color-chart-2)', 'var(--color-chart-3)', 'var(--color-chart-4)',
+  'var(--color-chart-5)', 'var(--color-chart-6)', 'var(--color-chart-7)', 'var(--color-chart-8)',
+]
+const STACK_COLORS = [
+  'var(--color-chart-1)', 'color-mix(in srgb, var(--color-chart-1) 75%, var(--color-surface))',
+  'color-mix(in srgb, var(--color-chart-1) 50%, var(--color-surface))',
+  'color-mix(in srgb, var(--color-chart-1) 30%, var(--color-surface))', 'var(--color-chart-2)',
+]
 
 export default function Analytics() {
   const { events, buckets, groups } = useLedger()
@@ -168,9 +175,9 @@ export default function Analytics() {
         title="Spending trend"
         subtitle={`${summary.title} · ${period === 'year' ? 'Monthly' : 'Daily'} totals`}
         data={summary.points.map((point) => ({ label: point.label, value: point.spending / 100 }))}
-        strokeColor="#e6ff4b"
-        gradientStart="rgba(230, 255, 75, 0.28)"
-        gradientStop="rgba(230, 255, 75, 0)"
+        strokeColor="var(--color-chart-1)"
+        gradientStart="color-mix(in srgb, var(--color-chart-1) 28%, transparent)"
+        gradientStop="transparent"
       />
 
       <Card className="p-4 sm:p-5">

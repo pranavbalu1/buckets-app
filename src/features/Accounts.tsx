@@ -128,21 +128,21 @@ export default function Accounts() {
   return (
     <div className="space-y-5 md:space-y-6">
       <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
-        <Card className="relative flex min-h-48 flex-col justify-between overflow-hidden border-zinc-800 bg-gradient-to-br from-[#121214] via-[#161b19] to-[#10202a] p-5 text-white shadow-md sm:p-6">
-          <div className="absolute -right-10 -top-16 size-52 rounded-full border-[30px] border-[#e6ff4b]/[0.08]" aria-hidden />
+        <Card className="relative flex min-h-48 flex-col justify-between overflow-hidden border-border bg-gradient-to-br from-surface via-accent-soft/60 to-info/10 p-5 text-foreground shadow-md sm:p-6">
+          <div className="absolute -right-10 -top-16 size-52 rounded-full border-[30px] border-accent/10" aria-hidden />
           <div className="relative flex items-start justify-between">
             <div>
-              <p className="text-xs font-medium text-white/70">Total across accounts</p>
+              <p className="text-xs font-medium text-muted-foreground">Total across accounts</p>
               <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">{formatCents(total)}</h2>
             </div>
-            <span className="grid size-10 place-items-center rounded-xl bg-white/10"><WalletCards className="size-5" /></span>
+            <span className="grid size-10 place-items-center rounded-xl bg-sunken text-muted-foreground"><WalletCards className="size-5" /></span>
           </div>
-          <div className="relative mt-6 flex items-end justify-between gap-4 border-t border-white/15 pt-4">
+          <div className="relative mt-6 flex items-end justify-between gap-4 border-t border-border pt-4">
             <div>
-              <p className="text-xs text-white/65">Active accounts</p>
+              <p className="text-xs text-muted-foreground">Active accounts</p>
               <p className="mt-0.5 text-sm font-semibold">{activeCount} {activeCount === 1 ? 'account' : 'accounts'}</p>
             </div>
-            <Button className="border-white/20 bg-white/10 text-white hover:bg-white/20" onClick={() => setDepositOpen(true)}>
+            <Button className="border-border bg-surface text-foreground hover:bg-sunken" onClick={() => setDepositOpen(true)}>
               <ArrowDownToLine className="size-4" /> Record deposit
             </Button>
           </div>

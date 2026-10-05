@@ -13,7 +13,10 @@ interface FlowLink extends SankeyExtraProperties { source: string; target: strin
 type LayoutNode = SankeyNode<FlowNode, FlowLink>
 type LayoutLink = SankeyLink<FlowNode, FlowLink>
 
-const PALETTE = ['#e6ff4b', '#00bdf9', '#03d791', '#f59e0b', '#a855f7', '#f43f5e', '#14b8a6']
+const PALETTE = [
+  'var(--color-chart-1)', 'var(--color-chart-2)', 'var(--color-chart-3)',
+  'var(--color-chart-4)', 'var(--color-chart-5)', 'var(--color-chart-6)', 'var(--color-chart-7)',
+]
 
 export default function SankeyChart({ events, buckets, groups, startDate, endDate }: {
   events: LedgerEvent[]
@@ -80,8 +83,8 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
       const merchantTotals = new Map<string, number>()
       let otherMerchantTotal = 0
       const groupActivity = ensure('group-activity', `${groupLabel} activity`, groupColor)
-      const spentNode = ensure('period-spending', 'Spending', '#f59e0b')
-      const unspentNode = ensure('unspent', 'Unspent balance', '#03d791')
+      const spentNode = ensure('period-spending', 'Spending', 'var(--color-chart-4)')
+      const unspentNode = ensure('unspent', 'Unspent balance', 'var(--color-chart-3)')
 
       for (const bucket of focusedBuckets) {
         const bucketEvents = focusedEvents.filter((event) => event.bucketId === bucket.id)
@@ -184,12 +187,12 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
       if (openingAmount > 0) addLink(ensure('starting-buckets', 'Starting bucket balances', '#64748b'), groupNode, openingAmount)
       const bucketNode = ensure(`bucket:${bucket.id}`, bucket.name, bucket.color ?? PALETTE[3])
       addLink(groupNode, bucketNode, amount)
-      if (bucketExpenses > 0) addLink(bucketNode, ensure('period-spending', 'Spending', '#f59e0b'), bucketExpenses)
+      if (bucketExpenses > 0) addLink(bucketNode, ensure('period-spending', 'Spending', 'var(--color-chart-4)'), bucketExpenses)
       const closingBalance = endBalances.buckets[bucket.id] ?? 0
-      addLink(bucketNode, ensure('unspent', 'Unspent balance', '#03d791'), Math.max(0, closingBalance))
+      addLink(bucketNode, ensure('unspent', 'Unspent balance', 'var(--color-chart-3)'), Math.max(0, closingBalance))
     }
 
-    addLink(available, ensure('unallocated', 'Unallocated', '#00bdf9'), Math.max(0, endBalances.unallocated))
+    addLink(available, ensure('unallocated', 'Unallocated', 'var(--color-chart-2)'), Math.max(0, endBalances.unallocated))
     addLink(ensure('available-shortfall', 'Available money shortfall', '#f43f5e'), ensure('unallocated-shortfall', 'Unallocated shortfall', '#fb7185'), Math.max(0, -endBalances.unallocated))
 
     // Balance only flow-through nodes. Sources and destinations are real endpoints,

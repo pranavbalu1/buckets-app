@@ -160,6 +160,16 @@
   --color-expense: #fbbf24;
   --color-expense-soft: #302411;
   --color-warning: #fbbf24;
+  --color-chart-1: #e6ff4b;
+  --color-chart-2: #00bdf9;
+  --color-chart-3: #03d791;
+  --color-chart-4: #f59e0b;
+  --color-chart-5: #a855f7;
+  --color-chart-6: #f43f5e;
+  --color-chart-7: #14b8a6;
+  --color-chart-8: #6366f1;
+  --color-chart-grid: #27272a;
+  --color-chart-crosshair: rgba(255, 255, 255, 0.25);
 
   /* Semantic aliases used by the components/ui kit. */
   --color-background: var(--color-canvas);
@@ -198,6 +208,16 @@
   --color-expense: #875b08;
   --color-expense-soft: #fff4d8;
   --color-warning: #805400;
+  --color-chart-1: #5b6e00;
+  --color-chart-2: #09648a;
+  --color-chart-3: #087653;
+  --color-chart-4: #a16207;
+  --color-chart-5: #7e22ce;
+  --color-chart-6: #b32946;
+  --color-chart-7: #0f766e;
+  --color-chart-8: #4338ca;
+  --color-chart-grid: #d5ddcf;
+  --color-chart-crosshair: rgba(29, 40, 28, 0.25);
 }
 
 @layer base {
@@ -240,7 +260,7 @@
   .hero-panel {
     position: relative;
     isolation: isolate;
-    background: linear-gradient(125deg, #121214 0%, #1b2113 48%, #10202a 100%);
+    background: linear-gradient(125deg, var(--color-surface) 0%, color-mix(in srgb, var(--color-accent-soft) 72%, var(--color-surface)) 48%, color-mix(in srgb, var(--color-info) 18%, var(--color-surface)) 100%);
   }
 
   .hero-orb {
@@ -251,8 +271,8 @@
     right: -6rem;
     top: -10rem;
     border-radius: 999px;
-    background: rgba(230, 255, 75, 0.1);
-    box-shadow: -5rem 8rem 0 2rem rgba(0, 189, 249, 0.08);
+    background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+    box-shadow: -5rem 8rem 0 2rem color-mix(in srgb, var(--color-info) 10%, transparent);
   }
 }
 

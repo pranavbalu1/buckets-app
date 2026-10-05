@@ -12,7 +12,7 @@ import { cn } from '@/lib/utils';
    COLOR MAPPER HELPER
    ========================================================================== */
 function parseColorStyle(colorClass: string) {
-  if (colorClass.startsWith('var(')) {
+  if (colorClass.startsWith('var(') || colorClass.startsWith('color-mix(')) {
     return {
       bg: colorClass,
       textStyle: { color: colorClass },
@@ -43,13 +43,13 @@ function parseColorStyle(colorClass: string) {
     'bg-cyan-400': '#22d3ee',
     'bg-blue-500': '#3b82f6',
     'bg-purple-500': '#a855f7',
-    'bg-[#e6ff4b]': '#e6ff4b',
-    'bg-[#b0cc29]': '#b0cc29',
-    'bg-[#6d8218]': '#6d8218',
-    'bg-[#42500d]': '#42500d',
+    'bg-[#e6ff4b]': 'var(--color-chart-1)',
+    'bg-[#b0cc29]': 'var(--color-chart-1)',
+    'bg-[#6d8218]': 'var(--color-chart-1)',
+    'bg-[#42500d]': 'var(--color-chart-1)',
   };
 
-  const hex = colorMap[colorClass] || '#e6ff4b';
+  const hex = colorMap[colorClass] || 'var(--color-chart-1)';
   return {
     bg: hex,
     textStyle: { color: hex },
@@ -74,11 +74,11 @@ export function GraphHoverTooltip({
   const colorStyle = parseColorStyle(color)
   return (
     <div
-      className="pointer-events-none absolute z-50 flex -translate-x-1/2 -translate-y-12 items-center gap-2 rounded-xl border bg-zinc-900/95 px-3 py-1.5 text-[11px] font-bold text-white shadow-2xl backdrop-blur-md transition-all duration-75"
+      className="pointer-events-none absolute z-50 flex -translate-x-1/2 -translate-y-12 items-center gap-2 rounded-xl border border-border bg-surface/95 px-3 py-1.5 text-[11px] font-bold text-foreground shadow-2xl backdrop-blur-md transition-all duration-75"
       style={{ left, top, borderColor: colorStyle.bg }}
     >
       <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: colorStyle.bg }} />
-      <span className="font-medium capitalize text-zinc-300">{label}:</span>
+      <span className="font-medium capitalize text-muted-foreground">{label}:</span>
       <span style={colorStyle.textStyle}>{value}</span>
     </div>
   )
@@ -106,12 +106,12 @@ export function BudgetGaugeGraph({
   const remaining = Math.max(0, safeBudget - safeSpent)
   const overspent = Math.max(0, safeSpent - safeBudget)
   const categories: SpendingCategory[] = [
-    { label: 'Spent', percentage: usedPercent, amount: formatCurrency(safeSpent), color: overspent > 0 ? '#f43f5e' : '#e6ff4b' },
+    { label: 'Spent', percentage: usedPercent, amount: formatCurrency(safeSpent), color: overspent > 0 ? 'var(--color-chart-6)' : 'var(--color-chart-1)' },
     {
       label: overspent > 0 ? 'Over budget' : 'Remaining',
       percentage: 100 - usedPercent,
       amount: formatCurrency(overspent || remaining),
-      color: overspent > 0 ? '#f43f5e' : '#00bdf9',
+      color: overspent > 0 ? 'var(--color-chart-6)' : 'var(--color-chart-2)',
     },
   ]
 
@@ -276,7 +276,7 @@ export function StackedBarGraph({
   return (
     <div
       className={cn(
-        'relative w-full rounded-3xl bg-[#121214] border border-border/40 p-6 text-foreground select-none flex flex-col justify-between',
+        'relative w-full rounded-3xl bg-surface border border-border/40 p-6 text-foreground select-none flex flex-col justify-between',
         className,
       )}
       onMouseMove={handleMouseMove}
@@ -304,13 +304,13 @@ export function StackedBarGraph({
 
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-xl font-bold tracking-tight text-white">{title}</h3>
+        <h3 className="text-xl font-bold tracking-tight text-foreground">{title}</h3>
         <div className="flex items-center gap-2">
           <div className="relative" ref={dropdownRef}>
             <button
               type="button"
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-white px-3 py-1.5 rounded-full bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 transition-colors"
+              className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground px-3 py-1.5 rounded-full bg-sunken hover:bg-sunken border border-border transition-colors"
             >
               <span>{selectedTimeframe}</span>
               <ChevronDown
@@ -322,7 +322,7 @@ export function StackedBarGraph({
             </button>
 
             {isDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-32 z-50 rounded-2xl bg-zinc-900 border border-zinc-800 p-1.5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+              <div className="absolute right-0 mt-2 w-32 z-50 rounded-2xl bg-surface border border-border p-1.5 shadow-2xl animate-in fade-in zoom-in-95 duration-150">
                 {timeframeOptions.map((option) => {
                   const isSelected = option === selectedTimeframe;
                   return (
@@ -333,8 +333,8 @@ export function StackedBarGraph({
                       className={cn(
                         'w-full flex items-center justify-between text-left text-xs px-2.5 py-1.5 rounded-xl transition-colors',
                         isSelected
-                          ? 'bg-zinc-800 text-white font-semibold'
-                          : 'text-zinc-400 hover:text-white hover:bg-zinc-800/50',
+                          ? 'bg-sunken text-foreground font-semibold'
+                          : 'text-muted-foreground hover:text-foreground hover:bg-sunken/50',
                       )}
                     >
                       <span>{option}</span>
@@ -352,7 +352,7 @@ export function StackedBarGraph({
             <button
               type="button"
               onClick={onActionClick}
-              className="size-8 rounded-full bg-zinc-800/80 hover:bg-zinc-700 flex items-center justify-center text-white transition-transform active:scale-95"
+              className="size-8 rounded-full bg-sunken hover:bg-border flex items-center justify-center text-foreground transition-transform active:scale-95"
             >
               <ArrowUpRight className="size-4" />
             </button>
@@ -362,7 +362,7 @@ export function StackedBarGraph({
 
       {/* Main Bar Chart */}
       <div className="relative flex items-stretch gap-4 h-60 pt-6 my-2">
-        <div className="flex flex-col justify-between text-[11px] font-medium text-zinc-500 py-1 pr-1 shrink-0">
+        <div className="flex flex-col justify-between text-[11px] font-medium text-muted-foreground py-1 pr-1 shrink-0">
           <span>{Math.round(maxStackValue / 1000)}k</span>
           <span>{Math.round((maxStackValue * 0.66) / 1000)}k</span>
           <span>{Math.round((maxStackValue * 0.33) / 1000)}k</span>
@@ -382,7 +382,7 @@ export function StackedBarGraph({
             const topSegment = col.segments[col.segments.length - 1];
             const topColorStyle = topSegment
               ? parseColorStyle(topSegment.color)
-              : parseColorStyle('#e6ff4b');
+              : parseColorStyle('var(--color-chart-1)');
 
             const showHighlight =
               isHoveredCol || (isSelected && hoveredColIndex === null);
@@ -448,9 +448,7 @@ export function StackedBarGraph({
                   )}
                   style={{
                     height: `${segmentPercent}%`,
-                    ...((seg.color.startsWith('#') || seg.color.startsWith('rgb') || seg.color.startsWith('bg-['))
-                      ? { backgroundColor: parseColorStyle(seg.color).bg }
-                      : {}),
+                    backgroundColor: parseColorStyle(seg.color).bg,
                     ...getRadiusStyle(pos),
                   }}
                         />
@@ -463,8 +461,8 @@ export function StackedBarGraph({
                   className={cn(
                     'text-xs font-medium mt-3 transition-colors shrink-0',
                     isSelected || isHoveredCol
-                      ? 'text-white font-bold'
-                      : 'text-zinc-500',
+                      ? 'text-foreground font-bold'
+                      : 'text-muted-foreground',
                   )}
                 >
                   {col.label}
@@ -477,18 +475,14 @@ export function StackedBarGraph({
 
       {/* Dynamic Footer Legend */}
       {activeLegend.length > 0 && (
-        <div className="flex items-center justify-center gap-4 flex-wrap pt-3 border-t border-zinc-800/60 mt-2 text-xs">
+        <div className="flex items-center justify-center gap-4 flex-wrap pt-3 border-t border-border/60 mt-2 text-xs">
           {activeLegend.map((item, idx) => (
             <div key={idx} className="flex items-center gap-2">
               <span
-                className={cn('size-2 rounded-full', item.color)}
-                style={
-                  item.color.startsWith('#')
-                    ? { backgroundColor: item.color }
-                    : undefined
-                }
+                className="size-2 rounded-full"
+                style={{ backgroundColor: parseColorStyle(item.color).bg }}
               />
-              <span className="text-zinc-400 font-medium">{item.label}</span>
+              <span className="text-muted-foreground font-medium">{item.label}</span>
             </div>
           ))}
         </div>
@@ -516,8 +510,8 @@ export interface SemiGaugeGraphProps extends React.HTMLAttributes<HTMLDivElement
 }
 
 const DISTINCT_GAUGE_COLORS = [
-  '#e6ff4b', '#00bdf9', '#03d791', '#f59e0b', '#a855f7',
-  '#f43f5e', '#14b8a6', '#6366f1', '#ffffff', '#f97316',
+'var(--color-chart-1)', 'var(--color-chart-2)', 'var(--color-chart-3)', 'var(--color-chart-4)', 'var(--color-chart-5)',
+'var(--color-chart-6)', 'var(--color-chart-7)', 'var(--color-chart-8)', 'var(--color-ink)', '#f97316',
 ]
 
 export function SemiGaugeGraph({
@@ -569,7 +563,7 @@ export function SemiGaugeGraph({
   return (
     <div
       className={cn(
-        'w-full rounded-3xl bg-[#121214] border border-border/40 p-6 text-foreground select-none flex flex-col justify-between',
+        'w-full rounded-3xl bg-surface border border-border/40 p-6 text-foreground select-none flex flex-col justify-between',
         className,
       )}
       onMouseMove={(event) => {
@@ -589,14 +583,14 @@ export function SemiGaugeGraph({
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
         <div className="min-w-0">
-          <h3 className="truncate text-xl font-bold tracking-tight text-white">{title}</h3>
-          {subtitle && <p className="mt-0.5 truncate text-xs text-zinc-400">{subtitle}</p>}
+          <h3 className="truncate text-xl font-bold tracking-tight text-foreground">{title}</h3>
+          {subtitle && <p className="mt-0.5 truncate text-xs text-muted-foreground">{subtitle}</p>}
         </div>
         {onActionClick && (
           <button
             type="button"
             onClick={onActionClick}
-            className="size-8 rounded-full bg-zinc-800/80 hover:bg-zinc-700 flex items-center justify-center text-white transition-transform active:scale-95"
+            className="size-8 rounded-full bg-sunken hover:bg-border flex items-center justify-center text-foreground transition-transform active:scale-95"
           >
             <ArrowUpRight className="size-4" />
           </button>
@@ -612,7 +606,7 @@ export function SemiGaugeGraph({
           <path
             d={`M ${cx - r} ${cy} A ${r} ${r} 0 0 1 ${cx + r} ${cy}`}
             fill="none"
-            stroke="#27272a"
+            stroke="var(--color-chart-grid)"
             strokeWidth="2.5"
             strokeLinecap="round"
           />
@@ -680,14 +674,14 @@ export function SemiGaugeGraph({
 
         {/* Amount Centerpiece */}
         <div className="absolute bottom-2 text-center pointer-events-none">
-          <span className="text-3xl font-extrabold tracking-tight text-white">
+          <span className="text-3xl font-extrabold tracking-tight text-foreground">
             {typeof amount === 'number' ? `$${amount}` : amount}
           </span>
         </div>
       </div>
 
       {/* Category Breakdown */}
-      <div className="space-y-2 mt-2 pt-2 border-t border-zinc-800/60 max-h-40 overflow-y-auto pr-1">
+      <div className="space-y-2 mt-2 pt-2 border-t border-border/60 max-h-40 overflow-y-auto pr-1">
         {chartCategories.map((cat, idx) => {
           const isSelected = activeIndex === idx;
 
@@ -697,7 +691,7 @@ export function SemiGaugeGraph({
               onMouseEnter={() => setActiveIndex(idx)}
               className={cn(
                 'flex min-w-0 items-center justify-between gap-2 text-xs px-1.5 py-1 rounded-lg cursor-pointer transition-colors',
-                isSelected ? 'bg-zinc-800/60' : 'hover:bg-zinc-800/30',
+                isSelected ? 'bg-sunken' : 'hover:bg-sunken/60',
               )}
             >
               <div className="flex min-w-0 items-center gap-2.5">
@@ -708,7 +702,7 @@ export function SemiGaugeGraph({
                 <span
                   className={cn(
                     'min-w-0 truncate font-medium transition-colors',
-                    isSelected ? 'text-white font-bold' : 'text-zinc-300',
+                    isSelected ? 'text-foreground font-bold' : 'text-muted-foreground',
                   )}
                 >
                   {cat.label}
@@ -718,12 +712,12 @@ export function SemiGaugeGraph({
                 <span
                   className={cn(
                     'font-bold transition-colors',
-                    isSelected ? 'text-white' : 'text-zinc-400',
+                    isSelected ? 'text-foreground' : 'text-muted-foreground',
                   )}
                 >
                   {cat.percentage}%
                 </span>
-                {cat.amount && <span className="text-[10px] text-zinc-500">{cat.amount}</span>}
+                {cat.amount && <span className="text-[10px] text-muted-foreground">{cat.amount}</span>}
               </div>
             </div>
           );
@@ -757,9 +751,9 @@ export function AreaLineGraph({
   title = 'Portfolio Value',
   subtitle,
   data = [],
-  strokeColor = '#e6ff4b',
-  gradientStart = 'rgba(230, 255, 75, 0.35)',
-  gradientStop = 'rgba(230, 255, 75, 0.0)',
+  strokeColor = 'var(--color-chart-1)',
+  gradientStart = 'color-mix(in srgb, var(--color-chart-1) 35%, transparent)',
+  gradientStop = 'transparent',
   onActionClick,
   currencyPrefix = '$',
   ...props
@@ -805,7 +799,7 @@ export function AreaLineGraph({
   return (
     <div
       className={cn(
-        'w-full rounded-3xl bg-[#121214] border border-border/40 p-6 text-foreground select-none flex flex-col justify-between',
+        'w-full rounded-3xl bg-surface border border-border/40 p-6 text-foreground select-none flex flex-col justify-between',
         className,
       )}
       {...props}
@@ -813,18 +807,18 @@ export function AreaLineGraph({
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
         <div>
-          <h3 className="text-xl font-bold tracking-tight text-white">
+          <h3 className="text-xl font-bold tracking-tight text-foreground">
             {title}
           </h3>
           {subtitle && (
-            <p className="text-xs text-zinc-400 mt-0.5">{subtitle}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
           )}
         </div>
         {onActionClick && (
           <button
             type="button"
             onClick={onActionClick}
-            className="size-8 rounded-full bg-zinc-800/80 hover:bg-zinc-700 flex items-center justify-center text-white transition-transform active:scale-95"
+            className="size-8 rounded-full bg-sunken hover:bg-border flex items-center justify-center text-foreground transition-transform active:scale-95"
           >
             <ArrowUpRight className="size-4" />
           </button>
@@ -833,12 +827,12 @@ export function AreaLineGraph({
 
       {/* Dynamic Display Value */}
       <div className="my-2">
-        <span className="text-3xl font-extrabold tracking-tight text-white">
+        <span className="text-3xl font-extrabold tracking-tight text-foreground">
           {currencyPrefix}
           {currentHovered ? currentHovered.value.toLocaleString() : '0'}
         </span>
         {currentHovered && (
-          <span className="text-xs text-zinc-400 ml-2 font-medium">
+          <span className="text-xs text-muted-foreground ml-2 font-medium">
             {currentHovered.label}
           </span>
         )}
@@ -902,7 +896,7 @@ export function AreaLineGraph({
               y1={0}
               x2={points[hoveredIdx].x}
               y2={height}
-              stroke="rgba(255,255,255,0.25)"
+              stroke="var(--color-chart-crosshair)"
               strokeDasharray="4 4"
               strokeWidth="1.5"
               vectorEffect="non-scaling-stroke"
@@ -924,7 +918,7 @@ export function AreaLineGraph({
               className="size-4 rounded-full border-2 border-[#121214] flex items-center justify-center shadow-lg"
               style={{ backgroundColor: strokeColor }}
             >
-              <div className="size-1.5 rounded-full bg-[#121214]" />
+              <div className="size-1.5 rounded-full bg-surface" />
             </div>
           </div>
         )}
@@ -963,7 +957,7 @@ export function MiniSparklineGraph({
   change,
   isPositive = true,
   data = [],
-  color = '#e6ff4b',
+  color = 'var(--color-chart-1)',
   ...props
 }: MiniSparklineProps) {
   const [hoveredIdx, setHoveredIdx] = React.useState<number | null>(null);
@@ -984,14 +978,14 @@ export function MiniSparklineGraph({
   return (
     <div
       className={cn(
-        'w-full rounded-2xl bg-[#121214] border border-border/40 p-4 flex items-center justify-between',
+        'w-full rounded-2xl bg-surface border border-border/40 p-4 flex items-center justify-between',
         className,
       )}
       {...props}
     >
       <div>
-        <p className="text-xs text-zinc-400 font-medium">{label}</p>
-        <p className="text-xl font-bold text-white mt-0.5">{value}</p>
+        <p className="text-xs text-muted-foreground font-medium">{label}</p>
+        <p className="text-xl font-bold text-foreground mt-0.5">{value}</p>
         <div className="flex items-center gap-1 mt-1">
           {isPositive ? (
             <TrendingUp className="size-3.5 text-emerald-400" />
