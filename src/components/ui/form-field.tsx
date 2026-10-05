@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { Children, cloneElement, isValidElement, useId, type ReactNode } from 'react'
 
 export function FormField({
   label,
@@ -15,10 +15,19 @@ export function FormField({
   helperText?: string
   children: ReactNode
 }) {
+  const labelId = useId()
+  const labeledChildren = label ? Children.map(children, (child) => {
+    if (!isValidElement<{ 'aria-labelledby'?: string }>(child)) return child
+    const existing = child.props['aria-labelledby']
+    return cloneElement(child, {
+      'aria-labelledby': [existing, labelId].filter(Boolean).join(' '),
+    })
+  }) : children
+
   return (
     <div className="w-full space-y-1.5">
-      {label && <label htmlFor={htmlFor} className="block text-xs font-semibold text-muted">{label}{required && <span aria-hidden="true"> *</span>}</label>}
-      {children}
+      {label && <label id={labelId} htmlFor={htmlFor} className="block text-xs font-semibold text-muted">{label}{required && <span aria-hidden="true"> *</span>}</label>}
+      {labeledChildren}
       {helperText && !error && <p className="text-xs text-muted">{helperText}</p>}
       {error && <p className="text-xs font-medium text-bad">{error}</p>}
     </div>

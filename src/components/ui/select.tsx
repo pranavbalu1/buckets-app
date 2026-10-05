@@ -35,7 +35,7 @@ function Select({
         {...props}
       >
         {placeholder && (
-          <option value="" disabled selected hidden>
+          <option value="" disabled hidden>
             {placeholder}
           </option>
         )}

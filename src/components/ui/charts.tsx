@@ -12,6 +12,13 @@ import { cn } from '@/lib/utils';
    COLOR MAPPER HELPER
    ========================================================================== */
 function parseColorStyle(colorClass: string) {
+  if (colorClass.startsWith('var(')) {
+    return {
+      bg: colorClass,
+      textStyle: { color: colorClass },
+      borderStyle: { borderColor: colorClass },
+    }
+  }
   if (colorClass.startsWith('#') || colorClass.startsWith('rgb')) {
     return {
       bg: colorClass,
@@ -48,6 +55,89 @@ function parseColorStyle(colorClass: string) {
     textStyle: { color: hex },
     borderStyle: { borderColor: hex },
   };
+}
+
+/** Shared cursor tooltip used by the graphs in this library. */
+export function GraphHoverTooltip({
+  left,
+  top,
+  label,
+  value,
+  color,
+}: {
+  left: number
+  top: number
+  label: string
+  value: string
+  color: string
+}) {
+  const colorStyle = parseColorStyle(color)
+  return (
+    <div
+      className="pointer-events-none absolute z-50 flex -translate-x-1/2 -translate-y-12 items-center gap-2 rounded-xl border bg-zinc-900/95 px-3 py-1.5 text-[11px] font-bold text-white shadow-2xl backdrop-blur-md transition-all duration-75"
+      style={{ left, top, borderColor: colorStyle.bg }}
+    >
+      <span className="size-2 shrink-0 rounded-full" style={{ backgroundColor: colorStyle.bg }} />
+      <span className="font-medium capitalize text-zinc-300">{label}:</span>
+      <span style={colorStyle.textStyle}>{value}</span>
+    </div>
+  )
+}
+
+export interface BudgetGaugeGraphProps extends React.HTMLAttributes<HTMLDivElement> {
+  title: string
+  budgetCents: number
+  spentCents: number
+  subtitle?: string
+}
+
+/** A semicircle budget gauge with explicit spent, budget, and remaining totals. */
+export function BudgetGaugeGraph({
+  title,
+  budgetCents,
+  spentCents,
+  subtitle,
+  className,
+  ...props
+}: BudgetGaugeGraphProps) {
+  const safeBudget = Math.max(0, budgetCents)
+  const safeSpent = Math.max(0, spentCents)
+  const usedPercent = safeBudget > 0 ? Math.min(100, Math.round(safeSpent / safeBudget * 100)) : safeSpent > 0 ? 100 : 0
+  const remaining = Math.max(0, safeBudget - safeSpent)
+  const overspent = Math.max(0, safeSpent - safeBudget)
+  const categories: SpendingCategory[] = [
+    { label: 'Spent', percentage: usedPercent, amount: formatCurrency(safeSpent), color: overspent > 0 ? '#f43f5e' : '#e6ff4b' },
+    {
+      label: overspent > 0 ? 'Over budget' : 'Remaining',
+      percentage: 100 - usedPercent,
+      amount: formatCurrency(overspent || remaining),
+      color: overspent > 0 ? '#f43f5e' : '#00bdf9',
+    },
+  ]
+
+  return (
+    <div className={cn('min-w-0', className)} {...props}>
+      <SemiGaugeGraph title={title} subtitle={subtitle} amount={formatCurrency(safeSpent)} categories={categories} />
+      <div className="mt-2 grid grid-cols-2 gap-2 rounded-xl border border-border/60 bg-card px-4 py-3 text-xs">
+        <div className="min-w-0">
+          <span className="block text-muted-foreground">Budget</span>
+          <strong className="mt-0.5 block truncate tabular-nums">{formatCurrency(safeBudget)}</strong>
+        </div>
+        <div
+          className="min-w-0 text-right"
+        >
+          <span className="block text-muted-foreground">{overspent ? 'Over budget' : 'Remaining'}</span>
+          <strong className={cn('mt-0.5 block truncate tabular-nums', overspent > 0 && 'text-destructive')}>
+            {formatCurrency(overspent || remaining)}
+          </strong>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function formatCurrency(cents: number) {
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100)
 }
 
 /* ==========================================================================
@@ -103,7 +193,7 @@ export function StackedBarGraph({
     y: number;
   } | null>(null);
   const [hoveredSegment, setHoveredSegment] = React.useState<{
-    key: string;
+    label: string;
     value: number;
     color: string;
   } | null>(null);
@@ -201,27 +291,14 @@ export function StackedBarGraph({
       {hoveredSegment &&
         cursorPos &&
         (() => {
-          const segColorProps = parseColorStyle(hoveredSegment.color);
           return (
-            <div
-              className="pointer-events-none absolute z-50 bg-zinc-900/95 backdrop-blur-md border text-white text-[11px] font-bold px-3 py-1.5 rounded-xl shadow-2xl transition-all duration-75 -translate-x-1/2 -translate-y-12 flex items-center gap-2"
-              style={{
-                left: `${cursorPos.x}px`,
-                top: `${cursorPos.y}px`,
-                borderColor: segColorProps.bg,
-              }}
-            >
-              <span
-                className="size-2 rounded-full shrink-0"
-                style={{ backgroundColor: segColorProps.bg }}
-              />
-              <span className="capitalize text-zinc-300 font-medium">
-                {hoveredSegment.key}:
-              </span>
-              <span style={segColorProps.textStyle}>
-                ${hoveredSegment.value.toLocaleString()}
-              </span>
-            </div>
+            <GraphHoverTooltip
+              left={cursorPos.x}
+              top={cursorPos.y}
+              label={hoveredSegment.label}
+              value={`$${hoveredSegment.value.toLocaleString()}`}
+              color={hoveredSegment.color}
+            />
           );
         })()}
 
@@ -340,7 +417,7 @@ export function StackedBarGraph({
                   style={{ height: `${totalHeightPercent}%` }}
                 >
                   <div className="w-full h-full flex flex-col-reverse gap-[2px]">
-                    {col.segments.map((seg, segIdx) => {
+          {col.segments.map((seg, segIdx) => {
                       const segmentPercent =
                         totalVal > 0 ? (seg.value / totalVal) * 100 : 0;
                       const isTop = segIdx === col.segments.length - 1;
@@ -354,25 +431,28 @@ export function StackedBarGraph({
                               ? 'bottom'
                               : 'middle';
 
-                      return (
-                        <div
-                          key={segIdx}
+              return (
+                <div
+                  key={segIdx}
                           onMouseEnter={(e) => {
                             e.stopPropagation();
                             setHoveredSegment({
-                              key: seg.key,
+                              label: seg.label?.trim() || seg.key,
                               value: seg.value,
                               color: seg.color,
                             });
                           }}
-                          className={cn(
-                            'w-full transition-all duration-200 cursor-pointer hover:brightness-125',
-                            seg.color,
-                          )}
-                          style={{
-                            height: `${segmentPercent}%`,
-                            ...getRadiusStyle(pos),
-                          }}
+                  className={cn(
+                    'w-full transition-all duration-200 cursor-pointer hover:brightness-125',
+                    seg.color,
+                  )}
+                  style={{
+                    height: `${segmentPercent}%`,
+                    ...((seg.color.startsWith('#') || seg.color.startsWith('rgb') || seg.color.startsWith('bg-['))
+                      ? { backgroundColor: parseColorStyle(seg.color).bg }
+                      : {}),
+                    ...getRadiusStyle(pos),
+                  }}
                         />
                       );
                     })}
@@ -424,18 +504,26 @@ export interface SpendingCategory {
   label: string;
   percentage: number;
   color: string;
+  amount?: string;
 }
 
 export interface SemiGaugeGraphProps extends React.HTMLAttributes<HTMLDivElement> {
   title?: string;
+  subtitle?: string;
   amount: string | number;
   categories?: SpendingCategory[];
   onActionClick?: () => void;
 }
 
+const DISTINCT_GAUGE_COLORS = [
+  '#e6ff4b', '#00bdf9', '#03d791', '#f59e0b', '#a855f7',
+  '#f43f5e', '#14b8a6', '#6366f1', '#ffffff', '#f97316',
+]
+
 export function SemiGaugeGraph({
   className,
   title = 'Top spending',
+  subtitle,
   amount = '$789',
   categories = [
     { label: 'Auto & Transport', percentage: 40, color: '#00bdf9' },
@@ -447,6 +535,26 @@ export function SemiGaugeGraph({
   ...props
 }: SemiGaugeGraphProps) {
   const [activeIndex, setActiveIndex] = React.useState<number>(0);
+  const [cursorPos, setCursorPos] = React.useState<{ x: number; y: number } | null>(null);
+  const chartCategories = React.useMemo(() => {
+    const usedColors = new Set<string>()
+    return categories.map((category, index) => {
+      let color = category.color
+      if (usedColors.has(color.toLowerCase())) {
+        color = DISTINCT_GAUGE_COLORS.find((candidate) => !usedColors.has(candidate.toLowerCase())) ?? ''
+        if (!color) {
+          let hue = (index * 137.508) % 360
+          color = `hsl(${hue} 82% 60%)`
+          while (usedColors.has(color.toLowerCase())) {
+            hue = (hue + 137.508) % 360
+            color = `hsl(${hue} 82% 60%)`
+          }
+        }
+      }
+      usedColors.add(color.toLowerCase())
+      return { ...category, color }
+    })
+  }, [categories])
 
   const cx = 100;
   const cy = 95;
@@ -464,11 +572,26 @@ export function SemiGaugeGraph({
         'w-full rounded-3xl bg-[#121214] border border-border/40 p-6 text-foreground select-none flex flex-col justify-between',
         className,
       )}
+      onMouseMove={(event) => {
+        const rect = event.currentTarget.getBoundingClientRect()
+        setCursorPos({ x: event.clientX - rect.left, y: event.clientY - rect.top })
+      }}
+      onMouseLeave={() => setCursorPos(null)}
       {...props}
     >
+      {cursorPos && chartCategories[activeIndex] && <GraphHoverTooltip
+        left={cursorPos.x}
+        top={cursorPos.y}
+        label={`${chartCategories[activeIndex].label} (${chartCategories[activeIndex].percentage}%)`}
+        value={chartCategories[activeIndex].amount ?? `${chartCategories[activeIndex].percentage}%`}
+        color={chartCategories[activeIndex].color}
+      />}
       {/* Header */}
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xl font-bold tracking-tight text-white">{title}</h3>
+        <div className="min-w-0">
+          <h3 className="truncate text-xl font-bold tracking-tight text-white">{title}</h3>
+          {subtitle && <p className="mt-0.5 truncate text-xs text-zinc-400">{subtitle}</p>}
+        </div>
         {onActionClick && (
           <button
             type="button"
@@ -494,7 +617,7 @@ export function SemiGaugeGraph({
             strokeLinecap="round"
           />
 
-          {categories.reduce<{ angle: number; nodes: React.ReactNode[] }>(
+          {chartCategories.reduce<{ angle: number; nodes: React.ReactNode[] }>(
             (state, cat, idx) => {
             const gap = 0.05;
             const segAngle = (cat.percentage / 100) * Math.PI;
@@ -565,7 +688,7 @@ export function SemiGaugeGraph({
 
       {/* Category Breakdown */}
       <div className="space-y-2 mt-2 pt-2 border-t border-zinc-800/60 max-h-40 overflow-y-auto pr-1">
-        {categories.map((cat, idx) => {
+        {chartCategories.map((cat, idx) => {
           const isSelected = activeIndex === idx;
 
           return (
@@ -573,32 +696,35 @@ export function SemiGaugeGraph({
               key={idx}
               onMouseEnter={() => setActiveIndex(idx)}
               className={cn(
-                'flex items-center justify-between text-xs px-1.5 py-1 rounded-lg cursor-pointer transition-colors',
+                'flex min-w-0 items-center justify-between gap-2 text-xs px-1.5 py-1 rounded-lg cursor-pointer transition-colors',
                 isSelected ? 'bg-zinc-800/60' : 'hover:bg-zinc-800/30',
               )}
             >
-              <div className="flex items-center gap-2.5">
+              <div className="flex min-w-0 items-center gap-2.5">
                 <span
                   className="size-2 rounded-full shrink-0"
                   style={{ backgroundColor: cat.color }}
                 />
                 <span
                   className={cn(
-                    'font-medium transition-colors',
+                    'min-w-0 truncate font-medium transition-colors',
                     isSelected ? 'text-white font-bold' : 'text-zinc-300',
                   )}
                 >
                   {cat.label}
                 </span>
               </div>
-              <span
-                className={cn(
-                  'font-bold transition-colors',
-                  isSelected ? 'text-white' : 'text-zinc-400',
-                )}
-              >
-                {cat.percentage}%
-              </span>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <span
+                  className={cn(
+                    'font-bold transition-colors',
+                    isSelected ? 'text-white' : 'text-zinc-400',
+                  )}
+                >
+                  {cat.percentage}%
+                </span>
+                {cat.amount && <span className="text-[10px] text-zinc-500">{cat.amount}</span>}
+              </div>
             </div>
           );
         })}
@@ -639,6 +765,7 @@ export function AreaLineGraph({
   ...props
 }: AreaLineGraphProps) {
   const [hoveredIdx, setHoveredIdx] = React.useState<number | null>(null);
+  const [cursorPos, setCursorPos] = React.useState<{ x: number; y: number } | null>(null);
 
   const values = data.map((d) => d.value);
   const minVal = Math.min(...(values.length ? values : [0])) * 0.95;
@@ -718,7 +845,21 @@ export function AreaLineGraph({
       </div>
 
       {/* SVG Line / Area Graph */}
-      <div className="relative w-full h-44 mt-2">
+      <div
+        className="relative w-full h-44 mt-2"
+        onMouseMove={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect()
+          setCursorPos({ x: event.clientX - rect.left, y: event.clientY - rect.top })
+        }}
+        onMouseLeave={() => { setHoveredIdx(null); setCursorPos(null) }}
+      >
+        {hoveredIdx !== null && currentHovered && cursorPos && <GraphHoverTooltip
+          left={cursorPos.x}
+          top={cursorPos.y}
+          label={currentHovered.label}
+          value={`${currencyPrefix}${currentHovered.value.toLocaleString()}`}
+          color={strokeColor}
+        />}
         <svg
           viewBox={`0 0 ${width} ${height}`}
           className="w-full h-full overflow-visible"
@@ -795,7 +936,6 @@ export function AreaLineGraph({
               key={idx}
               className="flex-1 h-full cursor-pointer"
               onMouseEnter={() => setHoveredIdx(idx)}
-              onMouseLeave={() => setHoveredIdx(null)}
             />
           ))}
         </div>
@@ -826,14 +966,16 @@ export function MiniSparklineGraph({
   color = '#e6ff4b',
   ...props
 }: MiniSparklineProps) {
-  const minVal = Math.min(...data);
-  const maxVal = Math.max(...data);
+  const [hoveredIdx, setHoveredIdx] = React.useState<number | null>(null);
+  const [cursorPos, setCursorPos] = React.useState<{ x: number; y: number } | null>(null);
+  const minVal = data.length ? Math.min(...data) : 0;
+  const maxVal = data.length ? Math.max(...data) : 0;
   const width = 120;
   const height = 40;
 
   const points = data
     .map((v, i) => {
-      const x = (i / (data.length - 1)) * width;
+      const x = data.length > 1 ? (i / (data.length - 1)) * width : width / 2;
       const y = height - ((v - minVal) / (maxVal - minVal || 1)) * height;
       return `${x},${y}`;
     })
@@ -867,7 +1009,21 @@ export function MiniSparklineGraph({
         </div>
       </div>
 
-      <div className="w-28 h-10">
+      <div
+        className="relative h-10 w-28"
+        onMouseMove={(event) => {
+          const rect = event.currentTarget.getBoundingClientRect()
+          setCursorPos({ x: event.clientX - rect.left, y: event.clientY - rect.top })
+        }}
+        onMouseLeave={() => { setHoveredIdx(null); setCursorPos(null) }}
+      >
+        {hoveredIdx !== null && cursorPos && <GraphHoverTooltip
+          left={cursorPos.x}
+          top={cursorPos.y}
+          label={`${label} ${hoveredIdx + 1}`}
+          value={data[hoveredIdx].toLocaleString()}
+          color={color}
+        />}
         <svg
           viewBox={`0 0 ${width} ${height}`}
           className="w-full h-full overflow-visible"
@@ -882,6 +1038,13 @@ export function MiniSparklineGraph({
             points={points}
           />
         </svg>
+        <div className="absolute inset-0 flex">
+          {data.map((_, index) => <div
+            key={index}
+            className="h-full flex-1 cursor-pointer"
+            onMouseEnter={() => setHoveredIdx(index)}
+          />)}
+        </div>
       </div>
     </div>
   );

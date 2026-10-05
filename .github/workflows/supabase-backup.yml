@@ -1,0 +1,53 @@
+name: Private Supabase backup
+
+on:
+  schedule:
+    - cron: '41 8 * * 0'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    env:
+      REPOSITORY_PRIVATE: ${{ github.event.repository.private }}
+    steps:
+      - name: Require a private repository and configured secrets
+        shell: bash
+        env:
+          SUPABASE_URL_CONFIGURED: ${{ secrets.SUPABASE_URL != '' }}
+          SERVICE_ROLE_KEY_CONFIGURED: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY != '' }}
+          SUPABASE_USER_ID_CONFIGURED: ${{ secrets.SUPABASE_USER_ID != '' }}
+        run: |
+          set -euo pipefail
+          if [[ "$REPOSITORY_PRIVATE" != "true" ]]; then
+            echo "Refusing to store a personal finance backup for a public repository."
+            exit 1
+          fi
+          if [[ "$SUPABASE_URL_CONFIGURED" != "true" || "$SERVICE_ROLE_KEY_CONFIGURED" != "true" || "$SUPABASE_USER_ID_CONFIGURED" != "true" ]]; then
+            echo "Configure SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, and SUPABASE_USER_ID as repository Actions secrets."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          package-manager-cache: false
+      - run: npm ci
+      - name: Export the selected user's backup
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_USER_ID: ${{ secrets.SUPABASE_USER_ID }}
+          OUTPUT_PATH: ${{ runner.temp }}/buckets-backup-${{ github.run_id }}.json
+        run: node scripts/export-supabase-backup.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: buckets-backup-${{ github.run_id }}
+          path: ${{ runner.temp }}/buckets-backup-${{ github.run_id }}.json
+          retention-days: 30
+          if-no-files-found: error

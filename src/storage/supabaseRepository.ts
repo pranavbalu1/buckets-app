@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase'
 import type { LedgerRepository } from './repository'
 import { eventToRow, parseAccount, parseBucket, parseEvent, parseGroup } from './mappers'
-import { parseBackup } from './backup'
+import { parseBackup, rekeyBackupForImport } from './backup'
 import type { AppBackup } from './backup'
 
 function fail(error: { message: string }): never {
@@ -81,12 +81,12 @@ export const supabaseRepository: LedgerRepository = {
   },
 
   async importAll(backup: AppBackup) {
-    const { error } = await supabase.rpc('restore_ledger', { p_backup: backup })
+    const { error } = await supabase.rpc('restore_ledger', { p_backup: rekeyBackupForImport(backup) })
     if (error) fail(error)
   },
 
-  async createAccount({ name, type, sortOrder }) {
-    const { data, error } = await supabase.from('accounts').insert({ name, type, sort_order: sortOrder }).select().single()
+  async createAccount({ id, name, type, sortOrder }) {
+    const { data, error } = await supabase.from('accounts').insert({ ...(id ? { id } : {}), name, type, sort_order: sortOrder }).select().single()
     if (error) fail(error)
     return parseAccount(data)
   },
@@ -107,10 +107,15 @@ export const supabaseRepository: LedgerRepository = {
     return parseAccount(data)
   },
 
-  async createGroup({ name, sortOrder, color }) {
+  async deleteAccount(id) {
+    const { error } = await supabase.rpc('delete_account', { p_account_id: id })
+    if (error) fail(error)
+  },
+
+  async createGroup({ id, name, sortOrder, color }) {
     const { data, error } = await supabase
       .from('bucket_groups')
-      .insert({ name, sort_order: sortOrder, color })
+      .insert({ ...(id ? { id } : {}), name, sort_order: sortOrder, color })
       .select()
       .single()
     if (error) fail(error)
@@ -137,10 +142,11 @@ export const supabaseRepository: LedgerRepository = {
     if (error) fail(error)
   },
 
-  async createBucket({ name, kind, groupId, sortOrder, monthlyTargetCents, targetCents, targetDate, color }) {
+  async createBucket({ id, name, kind, groupId, sortOrder, monthlyTargetCents, targetCents, targetDate, color }) {
     const { data, error } = await supabase
       .from('buckets')
       .insert({
+        ...(id ? { id } : {}),
         name,
         kind,
         group_id: groupId,

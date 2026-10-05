@@ -39,7 +39,7 @@ const eventIcons: Record<EventType, LucideIcon> = {
 
 const eventIconVariants: Record<EventType, string> = {
   income: 'bg-good/10 text-good',
-  expense: 'bg-amber-500/10 text-amber-300',
+  expense: 'bg-expense-soft text-expense',
   allocation: 'bg-accent-soft text-accent',
   bucket_move: 'bg-sunken text-muted',
   account_transfer: 'bg-sunken text-muted',
@@ -199,7 +199,7 @@ export default function Dashboard({ onAdd, onNavigate }: {
               <p className="text-xs font-semibold tracking-wide text-bad uppercase">Needs attention</p>
               <h2 className="mt-1 font-semibold">A few buckets are overdrawn</h2>
             </div>
-            <Button variant="ghost" size="sm" className="text-bad" onClick={() => onNavigate('Budget')}>Review budget <ArrowUpRight className="size-3.5" /></Button>
+            <Button variant="ghost" size="sm" className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-bad" onClick={() => onNavigate('Budget')}>Review budget <ArrowUpRight className="size-3.5" /></Button>
           </div>
           <ul className="divide-y divide-bad/10">
             {overspent.map((row) => (

@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { todayString } from '../domain/dates'
 import { makeEvent } from '../domain/events'
-import { centsToInput, parseDollars } from '../domain/money'
+import { maxAllocatable, maxReturnable } from '../domain/budget'
+import { centsToInput, formatCents, parseDollars } from '../domain/money'
 import type { DraftEvent, EventType, LedgerEvent } from '../domain/types'
 import { validateEvent } from '../domain/validate'
 import type { AddKind } from '../nav'
@@ -56,6 +57,8 @@ export default function QuickAdd({
 }) {
   const allAccounts = useLedger((s) => s.accounts)
   const allBuckets = useLedger((s) => s.buckets)
+  const groups = useLedger((s) => s.groups)
+  const events = useLedger((s) => s.events)
   const accounts = allAccounts.filter((a) => !a.archived || a.id === initialEvent?.accountId || a.id === initialEvent?.toAccountId)
   const buckets = allBuckets.filter((b) => !b.archived || b.id === initialEvent?.bucketId || b.id === initialEvent?.toBucketId)
   const addEvent = useLedger((s) => s.addEvent)
@@ -67,6 +70,7 @@ export default function QuickAdd({
   const [description, setDescription] = useState(initialEvent?.description ?? '')
   const [payee, setPayee] = useState(initialEvent?.payee ?? '')
   const [notes, setNotes] = useState(initialEvent?.notes ?? '')
+  const [customType, setCustomType] = useState(initialEvent?.customType ?? '')
   const [accountId, setAccountId] = useState(initialEvent?.accountId ?? '')
   const [toAccountId, setToAccountId] = useState(initialEvent?.toAccountId ?? '')
   const [bucketId, setBucketId] = useState(initialEvent?.bucketId ?? '')
@@ -74,6 +78,12 @@ export default function QuickAdd({
   const [direction, setDirection] = useState<'in' | 'out'>(initialEvent?.direction ?? 'in')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const categoryOptions = buckets.map((bucket) => {
+    const groupName = groups.find((group) => group.id === bucket.groupId)?.name
+    return { id: bucket.id, name: groupName ? `${groupName} / ${bucket.name}` : bucket.name }
+  })
+  const knownCustomTypes = [...new Set(events.flatMap((event) => event.customType?.trim() ? [event.customType.trim()] : []))]
+    .sort((a, b) => a.localeCompare(b))
 
   function build(cents: number): DraftEvent {
     const common = {
@@ -82,6 +92,7 @@ export default function QuickAdd({
       description: description.trim(),
       payee: payee.trim() || null,
       notes: notes.trim() || null,
+      customType: customType.trim() || null,
     }
     switch (kind) {
       case 'expense': return makeEvent({ type: 'expense', ...common, accountId, bucketId })
@@ -105,11 +116,28 @@ export default function QuickAdd({
       setError('Enter a valid amount, like 12.50')
       return
     }
+    if (customType.trim().length > 40) {
+      setError('Custom transaction types must be 40 characters or fewer.')
+      return
+    }
     const event = build(cents)
     const problem = validateEvent(event)
     if (problem) {
       setError(problem)
       return
+    }
+    if (event.type === 'allocation' && event.bucketId && event.month) {
+      const otherEvents = events.filter((item) => item.id !== initialEvent?.id)
+      const month = event.month.slice(0, 7)
+      const available = event.direction === 'out'
+        ? maxReturnable(otherEvents, event.bucketId, month)
+        : maxAllocatable(otherEvents, month)
+      if (cents > available) {
+        setError(event.direction === 'out'
+          ? `Only ${formatCents(available)} can come out of this bucket.`
+          : `Only ${formatCents(available)} is available to assign.`)
+        return
+      }
     }
     setBusy(true)
     const ok = initialEvent
@@ -141,7 +169,8 @@ export default function QuickAdd({
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </FormField>
 
-        {(kind === 'expense' || kind === 'allocation') && <Select label="Bucket" value={bucketId} onChange={setBucketId} options={buckets} />}
+        {kind === 'expense' && <Select label="Category" value={bucketId} onChange={setBucketId} options={categoryOptions} />}
+        {kind === 'allocation' && <Select label="Bucket" value={bucketId} onChange={setBucketId} options={buckets} />}
         {kind === 'expense' && <Select label="Paid from" value={accountId} onChange={setAccountId} options={accounts} />}
         {(kind === 'income' || kind === 'deposit') && <Select label="Deposit to" value={accountId} onChange={setAccountId} options={accounts} />}
         {kind === 'move' && <>
@@ -167,6 +196,14 @@ export default function QuickAdd({
         <FormField label="Payee (optional)">
           <Input placeholder="e.g. Market Street" value={payee} onChange={(e) => setPayee(e.target.value)} />
         </FormField>
+        <div>
+          <FormField label="Custom transaction type (optional)" helperText="Choose a saved type or enter a new one. It will be suggested after you save this transaction.">
+            <Input list="custom-transaction-types" placeholder="e.g. Medical, Reimbursement" value={customType} onChange={(e) => setCustomType(e.target.value)} />
+          </FormField>
+          <datalist id="custom-transaction-types">
+            {knownCustomTypes.map((label) => <option key={label} value={label} />)}
+          </datalist>
+        </div>
         <div className="sm:col-span-2">
           <FormField label="Notes (optional)">
             <Input placeholder="Add a note" value={notes} onChange={(e) => setNotes(e.target.value)} />

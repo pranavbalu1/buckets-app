@@ -19,7 +19,8 @@ const event = z.object({
   date: z.string(), month: z.string().nullable(), amountCents: z.number().int(),
   accountId: z.string().uuid().nullable(), toAccountId: z.string().uuid().nullable(),
   bucketId: z.string().uuid().nullable(), toBucketId: z.string().uuid().nullable(),
-  direction: z.enum(['in', 'out']).nullable(), description: z.string(), payee: z.string().nullable(), notes: z.string().nullable(),
+  direction: z.enum(['in', 'out']).nullable(), customType: z.string().trim().min(1).max(40).nullable().default(null),
+  description: z.string(), payee: z.string().nullable(), notes: z.string().nullable(),
 })
 const recurringPlan = z.object({
   id: z.string().uuid(), name: z.string(), eventType: z.enum(['income', 'expense', 'account_transfer', 'bucket_move']),
@@ -48,6 +49,77 @@ export type AppBackup = z.infer<typeof backupSchema>
 
 export function parseBackup(raw: unknown): AppBackup {
   return backupSchema.parse(raw)
+}
+
+/**
+ * Give an imported backup fresh primary keys before restoring it. Supabase IDs are
+ * global across users, so a portable or shared backup can otherwise collide with
+ * records owned by a different user in the same project.
+ */
+export function rekeyBackupForImport(backup: AppBackup): AppBackup {
+  const entities = [
+    ...backup.accounts,
+    ...backup.groups,
+    ...backup.buckets,
+    ...backup.events,
+    ...backup.recurringPlans,
+    ...backup.paycheckTemplates,
+    ...backup.reconciliations,
+  ]
+  const idMap = new Map<string, string>()
+  for (const entity of entities) {
+    if (idMap.has(entity.id)) throw new Error('This backup contains duplicate record IDs.')
+    idMap.set(entity.id, crypto.randomUUID())
+  }
+
+  const requiredId = (id: string) => {
+    const replacement = idMap.get(id)
+    if (!replacement) throw new Error('This backup refers to a record that is missing from the file.')
+    return replacement
+  }
+  const optionalId = (id: string | null) => id === null ? null : requiredId(id)
+
+  return {
+    ...backup,
+    accounts: backup.accounts.map((row) => ({ ...row, id: requiredId(row.id) })),
+    groups: backup.groups.map((row) => ({ ...row, id: requiredId(row.id) })),
+    buckets: backup.buckets.map((row) => ({
+      ...row,
+      id: requiredId(row.id),
+      groupId: optionalId(row.groupId),
+    })),
+    events: backup.events.map((row) => ({
+      ...row,
+      id: requiredId(row.id),
+      accountId: optionalId(row.accountId),
+      toAccountId: optionalId(row.toAccountId),
+      bucketId: optionalId(row.bucketId),
+      toBucketId: optionalId(row.toBucketId),
+    })),
+    recurringPlans: backup.recurringPlans.map((row) => ({
+      ...row,
+      id: requiredId(row.id),
+      accountId: optionalId(row.accountId),
+      toAccountId: optionalId(row.toAccountId),
+      bucketId: optionalId(row.bucketId),
+      toBucketId: optionalId(row.toBucketId),
+    })),
+    paycheckTemplates: backup.paycheckTemplates.map((row) => ({
+      ...row,
+      id: requiredId(row.id),
+      accountId: optionalId(row.accountId),
+      allocations: row.allocations.map((allocation) => ({
+        ...allocation,
+        bucketId: requiredId(allocation.bucketId),
+      })),
+    })),
+    reconciliations: backup.reconciliations.map((row) => ({
+      ...row,
+      id: requiredId(row.id),
+      accountId: requiredId(row.accountId),
+      adjustmentEventId: optionalId(row.adjustmentEventId),
+    })),
+  }
 }
 
 export function downloadBackup(backup: AppBackup): void {

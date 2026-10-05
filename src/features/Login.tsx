@@ -5,6 +5,7 @@ import { Card } from '../components/ui/card'
 import { FormField } from '../components/ui/form-field'
 import { Input } from '../components/ui/input'
 import { supabase } from '../lib/supabase'
+import loginHero from '../assets/login-hero.jpg'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -29,7 +30,15 @@ export default function Login() {
   return (
     <main className="grid min-h-screen place-items-center bg-canvas p-4 sm:p-6 lg:p-10">
       <div className="grid w-full max-w-6xl overflow-hidden rounded-[1.75rem] border border-line bg-surface shadow-xl lg:min-h-[650px] lg:grid-cols-[1.05fr_0.95fr]">
-        <section className="relative flex min-h-72 flex-col justify-between overflow-hidden bg-[#121214] p-6 text-white sm:p-9 lg:p-12">
+        <section className="relative flex min-h-96 flex-col justify-between overflow-hidden bg-[#121214] p-6 text-white sm:p-9 lg:min-h-0 lg:p-12">
+          <img
+            src={loginHero}
+            alt=""
+            aria-hidden="true"
+            className="absolute inset-0 size-full object-cover object-center opacity-70"
+          />
+          <div className="absolute inset-0 bg-gradient-to-br from-[#09090b]/90 via-[#09090b]/75 to-[#09090b]/55" aria-hidden />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#09090b]/75 via-transparent to-[#09090b]/20" aria-hidden />
           <div className="absolute -right-24 -top-28 size-80 rounded-full border-[44px] border-white/[0.045]" aria-hidden />
           <div className="absolute -bottom-36 -left-20 size-96 rounded-full bg-[#00bdf9]/10 blur-3xl" aria-hidden />
           <div className="relative flex items-center gap-3">

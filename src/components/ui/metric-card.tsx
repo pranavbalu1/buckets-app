@@ -5,13 +5,13 @@ import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '@/lib/utils';
 
 const metricCardVariants = cva(
-  'relative overflow-hidden rounded-3xl p-5 border transition-all duration-200 select-none flex flex-col justify-between',
+  'relative box-border overflow-hidden rounded-3xl p-5 transition-all duration-200 select-none flex flex-col justify-between',
   {
     variants: {
       priority: {
-        high: 'bg-gradient-to-r from-[#e6ff4b] via-[#a2f267] to-[#00bdf9] text-zinc-950 border-transparent shadow-xl',
-        medium: 'bg-card border-border/80 text-foreground shadow-lg',
-        low: 'bg-card/60 border-border/40 text-foreground shadow-md',
+        high: 'border-0 bg-origin-border bg-clip-border bg-gradient-to-r from-[#e6ff4b] via-[#a2f267] to-[#00bdf9] text-zinc-950 shadow-xl',
+        medium: 'border border-border/80 bg-card text-foreground shadow-lg',
+        low: 'border border-border/40 bg-card/60 text-foreground shadow-md',
       },
     },
     defaultVariants: {
@@ -21,12 +21,21 @@ const metricCardVariants = cva(
 );
 
 const fontSizeMap = {
+  xs: { main: 'text-lg', decimal: 'text-xs', target: 'text-xs' },
   sm: { main: 'text-xl', decimal: 'text-sm', target: 'text-sm' },
   md: { main: 'text-2xl', decimal: 'text-base', target: 'text-base' },
   lg: { main: 'text-3xl', decimal: 'text-xl', target: 'text-xl' },
   xl: { main: 'text-4xl', decimal: 'text-2xl', target: 'text-2xl' },
   '2xl': { main: 'text-5xl', decimal: 'text-3xl', target: 'text-3xl' },
 };
+
+function formatAmount(value: string | number) {
+  const text = typeof value === 'number' ? value.toFixed(2) : String(value)
+  const decimalIndex = text.lastIndexOf('.')
+  return decimalIndex >= 0
+    ? { main: text.slice(0, decimalIndex), decimal: text.slice(decimalIndex) }
+    : { main: text, decimal: '' }
+}
 
 export interface MetricCardProps
   extends
@@ -71,6 +80,8 @@ export function MetricCard({
 }: MetricCardProps) {
   const isHighPriority = priority === 'high';
   const isGoal = type === 'goal';
+  const formatted = formatAmount(amount)
+  const mainLength = formatted.main.length
 
   // Determine font sizes based on prop or sensible defaults per layout type
   const resolvedFontSize = React.useMemo(() => {
@@ -78,26 +89,14 @@ export function MetricCard({
       return fontSizeMap[fontSize as keyof typeof fontSizeMap];
     }
     // Default fallback sizes per layout type if fontSize is not passed
-    if (type === 'compact') return fontSizeMap.md;
+    if (type === 'compact') {
+      if (mainLength >= 12) return fontSizeMap.xs
+      if (mainLength >= 8) return fontSizeMap.sm
+      return fontSizeMap.md
+    }
     if (isHighPriority || type === 'standard') return fontSizeMap.xl;
     return fontSizeMap.lg;
-  }, [fontSize, type, isHighPriority]);
-
-  // Split decimal for high-contrast sizing ($25,230.00)
-  const formatAmount = (val: string | number) => {
-    if (typeof val === 'number') {
-      const parts = val.toFixed(2).split('.');
-      return { main: `$${parts[0]}`, decimal: `.${parts[1]}` };
-    }
-    const str = String(val);
-    if (str.includes('.')) {
-      const parts = str.split('.');
-      return { main: parts[0], decimal: `.${parts[1]}` };
-    }
-    return { main: str, decimal: '' };
-  };
-
-  const formatted = formatAmount(amount);
+  }, [fontSize, type, isHighPriority, mainLength]);
 
   return (
     <div
@@ -167,11 +166,11 @@ export function MetricCard({
 
       {/* Main Number Row */}
       <div className="relative z-10 my-auto pt-2">
-        <div className="flex items-baseline gap-0.5">
+        <div className="flex min-w-0 max-w-full flex-nowrap items-baseline gap-0.5 overflow-hidden tabular-nums">
           {/* Main Integer Part */}
           <span
             className={cn(
-              'font-bold tracking-tight',
+              'min-w-0 truncate whitespace-nowrap font-bold tracking-tight',
               typeof fontSize === 'string' && !(fontSize in fontSizeMap)
                 ? fontSize // Custom Tailwind class passed directly
                 : resolvedFontSize.main,
@@ -185,7 +184,7 @@ export function MetricCard({
           {formatted.decimal && (
             <span
               className={cn(
-                'font-medium',
+              'shrink-0 whitespace-nowrap font-medium',
                 resolvedFontSize.decimal,
                 isHighPriority ? 'text-zinc-950/50' : 'text-muted-foreground',
               )}

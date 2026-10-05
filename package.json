@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "seed:demo": "node --env-file=.env.demo scripts/seed-demo-data.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
@@ -20,6 +21,7 @@
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-is": "^19.3.0",
+    "react-router": "^8.4.0",
     "recharts": "^3.10.1",
     "zod": "^4.6.5",
     "zustand": "^5.0.15"

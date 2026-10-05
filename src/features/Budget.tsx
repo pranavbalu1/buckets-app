@@ -1,12 +1,15 @@
-import { Fragment, useMemo, useState } from 'react'
-import { Plus, Sparkles, Users } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import type { DragEvent, ReactNode } from 'react'
+import { Check, ChevronDown, GripVertical, Plus, Sparkles, Users } from 'lucide-react'
 import { Modal } from '../components/ui/modal'
 import { Button } from '../components/ui/button'
 import { Card } from '../components/ui/card'
+import { List } from '../components/ui/list'
+import type { ListItemData } from '../components/ui/list'
 import Money from '../components/Money'
 import ProgressBar from '../components/ProgressBar'
 import { computeBalances } from '../domain/balances'
-import { computeMonthBudget, maxReturnable, planRain } from '../domain/budget'
+import { computeMonthBudget, maxAllocatable, maxReturnable, planRain } from '../domain/budget'
 import type { BucketMonth } from '../domain/budget'
 import { addMonths, currentMonth, dateLabel, monthLabel, todayString } from '../domain/dates'
 import { makeEvent } from '../domain/events'
@@ -23,35 +26,6 @@ type Dialog =
 
 type Section = { key: string; title: string; group: BucketGroup | null; items: Bucket[] }
 
-const TABLE_HEAD = (
-  <>
-    <colgroup>
-      <col />
-      <col className="w-28" />
-      <col className="w-32" />
-      <col className="w-32" />
-      <col className="w-28" />
-      <col className="w-24" />
-      <col className="w-28" />
-      <col className="w-44" />
-      <col className="w-14" />
-    </colgroup>
-    <thead className="sticky top-0 z-[1] bg-surface/95 text-[10px] tracking-wide text-muted uppercase backdrop-blur">
-      <tr>
-        <th className="px-3 py-2 text-left font-medium"><span className="sr-only">Bucket</span></th>
-        <th className="px-3 py-2 text-right font-medium">Available</th>
-        <th className="px-3 py-2 text-right font-medium" title="The bucket balance carried in from before this month">Opening balance</th>
-        <th className="px-3 py-2 text-center font-medium">In / Out</th>
-        <th className="px-3 py-2 text-right font-medium">Monthly want</th>
-        <th className="px-3 py-2 text-right font-medium">Net funded</th>
-        <th className="px-3 py-2 text-right font-medium">Spent</th>
-        <th className="px-3 py-2 text-left font-medium">Want progress</th>
-        <th className="px-3 py-2"><span className="sr-only">Actions</span></th>
-      </tr>
-    </thead>
-  </>
-)
-
 export default function Budget() {
   const { groups, buckets, events, addEvent } = useLedger()
   const [month, setMonth] = useState(currentMonth())
@@ -61,6 +35,9 @@ export default function Budget() {
   const [expandedBuckets, setExpandedBuckets] = useState<Record<string, boolean>>({})
   const [draggedBucket, setDraggedBucket] = useState<string | null>(null)
   const [draggedGroup, setDraggedGroup] = useState<string | null>(null)
+  const [dragOverBucket, setDragOverBucket] = useState<string | null>(null)
+  const [dragOverGroup, setDragOverGroup] = useState<string | null>(null)
+  const [dragPlacement, setDragPlacement] = useState<'before' | 'after'>('before')
 
   const budget = useMemo(
     () => computeMonthBudget(events, buckets.map((b) => b.id), month),
@@ -96,14 +73,20 @@ export default function Budget() {
   const toggle = (key: string) => setCollapsed((c) => ({ ...c, [key]: !c[key] }))
   const toggleBucketDetails = (key: string) => setExpandedBuckets((state) => ({ ...state, [key]: !state[key] }))
 
-  async function reorderBuckets(sourceId: string, targetId: string, targetGroupId: string | null) {
+  async function reorderBuckets(
+    sourceId: string,
+    targetId: string,
+    targetGroupId: string | null,
+    placement: 'before' | 'after' = 'before',
+  ) {
     if (sourceId === targetId) return
     const ordered = [...buckets].sort((a, b) => a.sortOrder - b.sortOrder)
     const source = ordered.find((b) => b.id === sourceId)
     if (!source) return
     const without = ordered.filter((b) => b.id !== sourceId)
     const targetIndex = without.findIndex((b) => b.id === targetId)
-    without.splice(targetIndex < 0 ? without.length : targetIndex, 0, { ...source, groupId: targetGroupId })
+    const insertionIndex = targetIndex < 0 ? without.length : targetIndex + (placement === 'after' ? 1 : 0)
+    without.splice(insertionIndex, 0, { ...source, groupId: targetGroupId })
     await Promise.all(without.map((bucket, index) =>
       useLedger.getState().updateBucket(bucket.id, { sortOrder: index, groupId: bucket.groupId }),
     ))
@@ -122,9 +105,81 @@ export default function Budget() {
     ))
   }
 
+  function startBucketDrag(event: DragEvent, bucketId: string) {
+    event.stopPropagation()
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', `bucket:${bucketId}`)
+    setDraggedBucket(bucketId)
+    setDraggedGroup(null)
+  }
+
+  function startGroupDrag(event: DragEvent, groupId: string) {
+    event.stopPropagation()
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', `group:${groupId}`)
+    setDraggedGroup(groupId)
+    setDraggedBucket(null)
+  }
+
+  function endDrag() {
+    setDraggedBucket(null)
+    setDraggedGroup(null)
+    setDragOverBucket(null)
+    setDragOverGroup(null)
+    setDragPlacement('before')
+  }
+
+  function allowGroupDrop(event: DragEvent, section: Section) {
+    if (!draggedBucket && !(draggedGroup && section.group)) return
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+    setDragOverGroup(section.key)
+  }
+
+  function dropOnGroup(event: DragEvent, section: Section) {
+    if (!draggedBucket && !(draggedGroup && section.group)) return
+    event.preventDefault()
+    event.stopPropagation()
+    if (draggedBucket) {
+      const lastBucket = section.items.at(-1)
+      if (lastBucket) {
+        void reorderBuckets(draggedBucket, lastBucket.id, section.group?.id ?? null, 'after')
+      } else {
+        const nextOrder = Math.max(0, ...buckets.map((bucket) => bucket.sortOrder)) + 1
+        void useLedger.getState().updateBucket(draggedBucket, { groupId: section.group?.id ?? null, sortOrder: nextOrder })
+      }
+    } else if (draggedGroup && section.group) {
+      void reorderGroups(draggedGroup, section.group.id)
+    }
+    endDrag()
+  }
+
+  function allowBucketDrop(event: DragEvent, bucketId: string) {
+    if (!draggedBucket) return
+    event.preventDefault()
+    event.stopPropagation()
+    event.dataTransfer.dropEffect = 'move'
+    setDragOverBucket(bucketId)
+    const bounds = event.currentTarget.getBoundingClientRect()
+    setDragPlacement(event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after')
+  }
+
+  function dropOnBucket(event: DragEvent, bucket: Bucket) {
+    if (!draggedBucket) return
+    event.preventDefault()
+    event.stopPropagation()
+    const bounds = event.currentTarget.getBoundingClientRect()
+    const placement = event.clientY < bounds.top + bounds.height / 2 ? 'before' : 'after'
+    void reorderBuckets(draggedBucket, bucket.id, bucket.groupId, placement)
+    endDrag()
+  }
+
   /** Positive cents put money in from Rain; negative takes it back. Returns an error message or null. */
   async function moveInOut(bucket: Bucket, cents: number): Promise<string | null> {
-    if (cents < 0) {
+    if (cents > 0) {
+      const max = maxAllocatable(events, month)
+      if (cents > max) return `Only ${formatCents(max)} is available to assign`
+    } else if (cents < 0) {
       const max = maxReturnable(events, bucket.id, month)
       if (-cents > max) return `Only ${formatCents(max)} can come out`
     }
@@ -143,17 +198,17 @@ export default function Budget() {
   }
 
   return (
-    <div className="space-y-4">
-      <Card className="sticky top-3 z-10 flex flex-wrap items-center gap-x-8 gap-y-3 p-4 shadow-md backdrop-blur-xl">
+    <div className="space-y-3">
+      <Card className="sticky top-2 z-10 flex flex-wrap items-center gap-x-6 gap-y-2 p-3 shadow-md backdrop-blur-xl">
         <Figure label="Rain · unassigned" cents={rain} big accent={rain >= 0} />
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <Figure label="Income" cents={budget.incomeCents} />
-          <Figure label="Net assigned" cents={budget.allocatedCents} />
           <span className="text-muted">−</span>
           <Figure label="Spending" cents={budget.spentCents} />
           <span className="text-muted">=</span>
-          <Figure label="Income − spending" cents={budget.incomeCents - budget.spentCents} />
+          <Figure label="Income after spending" cents={budget.incomeCents - budget.spentCents} />
         </div>
+        <Figure label="Net assigned" cents={budget.allocatedCents} />
         <Figure label="Net account balances" cents={bank} />
 
         <div className="ml-auto flex items-center gap-2">
@@ -181,6 +236,10 @@ export default function Budget() {
           Show archived
         </label>
       </div>
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <GripVertical className="size-3.5 shrink-0" aria-hidden />
+        Drag the handles to reorder. Drop on a bucket to place before or after it, or drop on a group to move to its end.
+      </p>
 
       {sections.length === 0 && (
         <p className="py-8 text-center text-muted">
@@ -188,148 +247,252 @@ export default function Budget() {
         </p>
       )}
 
-      {sections.map((s) => {
-        const { group } = s
-        const isCollapsed = collapsed[s.key] ?? false
-        const sum = (f: (b: Bucket) => number) => s.items.reduce((t, b) => t + f(b), 0)
-        const groupIn = sum(inOf)
+      {sections.map((section) => {
+        const { group } = section
+        const isCollapsed = collapsed[section.key] ?? false
+        const sum = (getValue: (bucket: Bucket) => number) =>
+          section.items.reduce((total, bucket) => total + getValue(bucket), 0)
+        const groupAvailable = sum(availableOf)
+        const groupWant = sum((bucket) => bucket.monthlyTargetCents)
+        const groupFunded = sum(inOf)
         const groupSpent = sum(spentOf)
+        const listItems: ListItemData[] = section.items.map((bucket) => ({
+          id: bucket.id,
+          title: bucket.name,
+        }))
 
         return (
-          <section key={s.key} className="card overflow-hidden shadow-sm transition-shadow hover:shadow-md">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[68rem] table-fixed text-sm">
-                {TABLE_HEAD}
-                <tbody>
-                  <tr className="bg-sunken/75 font-medium transition-colors hover:bg-sunken"
-                    draggable={Boolean(group)}
-                    onDragStart={() => group && setDraggedGroup(group.id)}
-                    onDragEnd={() => setDraggedGroup(null)}
-                    onDragOver={(event) => event.preventDefault()}
-                    onDrop={() => {
-                      if (group && draggedBucket) {
-                        const firstBucket = s.items[0]
-                        if (firstBucket) void reorderBuckets(draggedBucket, firstBucket.id, group.id)
-                        else void useLedger.getState().updateBucket(draggedBucket, { groupId: group.id })
-                      } else if (group && draggedGroup) {
-                        void reorderGroups(draggedGroup, group.id)
-                      }
-                      setDraggedGroup(null)
-                      setDraggedBucket(null)
-                    }}>
-                    <td className="px-3 py-2">
-                      <button aria-expanded={!isCollapsed} onClick={() => toggle(s.key)}
-                        className="flex items-center gap-2">
-                        <span aria-hidden className="w-4 text-center text-muted">{isCollapsed ? '+' : '−'}</span>
-                        {group && <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: group.color ?? '#64748b' }} />}
-                        {s.title}
-                      </button>
-                    </td>
-                    <td className="px-3 py-2 text-right"><Money cents={sum(availableOf)} /></td>
-                    <td className="px-3 py-2 text-right tabular-nums text-muted"><Money cents={sum((b) => rows.get(b.id)?.carryoverCents ?? 0)} /></td>
-                    <td />
-                    <td className="px-3 py-2 text-right tabular-nums">{formatCents(sum((b) => b.monthlyTargetCents))}</td>
-                    <td className="px-3 py-2 text-right tabular-nums"><Money cents={groupIn} /></td>
-                    <td className="px-3 py-2 text-right tabular-nums">{formatCents(groupSpent)}</td>
-                    <td />
-                    <td className="px-2 text-right">
-                      {group && <button className="btn-link" aria-label={`Edit group ${group.name}`}
-                        onClick={() => setDialog({ kind: 'editor', target: { type: 'group', value: group } })}>Edit</button>}
-                    </td>
-                  </tr>
-
-                  {!isCollapsed && s.items.length === 0 && (
-                    <tr><td colSpan={9} className="px-3 py-3 text-muted">No buckets in this group yet.</td></tr>
-                  )}
-
-                  {!isCollapsed && s.items.map((b) => {
-                    const funded = inOf(b)
-                    const spent = spentOf(b)
-                    const bucketMonth = rows.get(b.id)
-                    const isExpanded = expandedBuckets[b.id] ?? false
-                    return (
-                      <Fragment key={b.id}>
-                      <tr className={`group border-t border-line transition-colors hover:bg-sunken/35 ${b.archived ? 'opacity-60' : ''}`}
+          <List
+            key={section.key}
+            aria-label={section.title + ' budget'}
+            density="compact"
+            filterTabs={[]}
+            heightClass="h-auto"
+            items={isCollapsed ? [] : listItems}
+            emptyMessage={
+              isCollapsed
+                ? ''
+                : draggedBucket && dragOverGroup === section.key
+                  ? 'Drop to add this bucket to the end of the group.'
+                  : 'No buckets yet. Drop a bucket here or add one with New bucket.'
+            }
+            className={
+              'transition-colors ' +
+              (dragOverGroup === section.key ? 'ring-2 ring-accent/30' : '')
+            }
+            style={dragOverGroup === section.key ? {
+              borderColor: 'var(--color-accent)',
+              backgroundColor: 'var(--color-accent-soft)',
+              boxShadow: '0 0 0 2px color-mix(in srgb, var(--color-accent) 28%, transparent)',
+            } : {
+              borderColor: 'color-mix(in srgb, var(--color-ink) 20%, var(--color-line))',
+            }}
+            onDragOver={(event) => allowGroupDrop(event, section)}
+            onDragLeave={(event) => {
+              if (!(event.relatedTarget instanceof Node) || !event.currentTarget.contains(event.relatedTarget)) {
+                setDragOverGroup(null)
+              }
+            }}
+            onDrop={(event) => dropOnGroup(event, section)}
+            headerContent={
+              <div className="px-1">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-1.5">
+                    {group && (
+                      <button
+                        type="button"
                         draggable
-                        onDragStart={() => setDraggedBucket(b.id)}
-                        onDragEnd={() => setDraggedBucket(null)}
-                        onDragOver={(event) => event.preventDefault()}
-                        onDrop={() => {
-                          if (draggedBucket) void reorderBuckets(draggedBucket, b.id, group?.id ?? null)
-                          setDraggedBucket(null)
-                        }}>
-                        <td className="px-3 py-2">
-                          <div className="flex items-center gap-2.5">
-                            <span className="h-2.5 w-2.5 shrink-0 rounded-full"
-                              style={{ backgroundColor: b.color ?? group?.color ?? bucketColor(b) }} />
-                            <span className="truncate font-medium">{b.name}</span>
-                            {b.archived && <span className="text-xs text-muted">archived</span>}
-                            {b.kind !== 'spending' && (
-                              <span className="rounded-full bg-sunken px-2 py-0.5 text-xs text-muted">
-                                {BUCKET_KIND_LABELS[b.kind]}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-3 py-2 text-right font-medium">
-                          <Money cents={availableOf(b)} />
-                          {availableOf(b) < 0 && <span className="mt-0.5 block text-[10px] font-normal text-bad">overspent</span>}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-muted">
-                          <Money cents={bucketMonth?.carryoverCents ?? 0} />
-                        </td>
-                        <td className="px-1 py-1 align-top">
-                          {!b.archived && <InOutCell name={b.name} onSubmit={(c) => moveInOut(b, c)} />}
-                        </td>
-                        <td className="px-1 py-1 align-top">
-                          <WantCell key={`${b.id}-${b.monthlyTargetCents}`} bucket={b} />
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-muted">
-                          {funded === 0 ? '—' : <Money cents={funded} />}
-                        </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-muted">
-                          {spent === 0 ? '—' : formatCents(spent)}
-                        </td>
-                        <td className="px-3 py-2">
-                          {b.monthlyTargetCents > 0 ? (
-                            <div className="space-y-1">
-                              <ProgressBar pct={(funded / b.monthlyTargetCents) * 100} over={funded > b.monthlyTargetCents} />
-                              <div className="text-xs text-muted">
-                                {funded < 0
-                                  ? `${formatCents(-funded)} returned to Rain`
-                                  : `${formatCents(funded)} of ${formatCents(b.monthlyTargetCents)}`}
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-muted">—</span>
-                          )}
-                        <button className="btn-link mt-1 text-xs"
-                          aria-label={`${isExpanded ? 'Hide' : 'Show'} calculation for ${b.name}`} aria-expanded={isExpanded}
-                          aria-controls={`bucket-details-${b.id}`} onClick={() => toggleBucketDetails(b.id)}>
-                          {isExpanded ? 'Hide calculation' : 'Show calculation'}
-                        </button>
-                      </td>
-                        <td className="px-2 text-right">
-                          <button className="btn-link" aria-label={`Edit ${b.name}`}
-                            onClick={() => setDialog({ kind: 'editor', target: { type: 'bucket', value: b } })}>Edit</button>
-                        </td>
-                      </tr>
-                      {isExpanded && bucketMonth && <tr id={`bucket-details-${b.id}`} className="border-t border-line bg-sunken/30">
-                        <td colSpan={9} className="p-3 sm:p-4">
-                          <BucketBreakdown bucket={b} row={bucketMonth} month={month}
-                            groupName={groups.find((item) => item.id === b.groupId)?.name ?? 'Ungrouped'} />
-                        </td>
-                      </tr>}
-                      </Fragment>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </section>
+                        aria-label={'Drag to reorder ' + group.name}
+                        title="Drag this handle to reorder groups"
+                        className="grid size-8 shrink-0 cursor-grab place-items-center rounded-lg text-muted transition hover:bg-sunken hover:text-ink active:cursor-grabbing"
+                        onDragStart={(event) => startGroupDrag(event, group.id)}
+                        onDragEnd={endDrag}
+                      >
+                        <GripVertical className="size-4" aria-hidden />
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      aria-expanded={!isCollapsed}
+                      onClick={() => toggle(section.key)}
+                        className="flex min-w-0 items-center gap-2 rounded-lg py-1 text-left text-base font-semibold hover:text-accent"
+                    >
+                      <ChevronDown className={'size-4 shrink-0 text-muted transition-transform ' + (isCollapsed ? '-rotate-90' : '')} aria-hidden />
+                      {group && (
+                        <span
+                          className="size-2.5 shrink-0 rounded-full"
+                          style={{ backgroundColor: group.color ?? '#64748b' }}
+                          aria-hidden
+                        />
+                      )}
+                      <span className="truncate">{section.title}</span>
+                    </button>
+                    <span className="shrink-0 rounded-full border border-border bg-sunken px-2 py-0.5 text-xs font-medium text-foreground">
+                      {section.items.length}
+                    </span>
+                  </div>
+
+                  <div className="flex shrink-0 items-center gap-3">
+                    <div className="text-right">
+                      <p className="text-sm font-semibold tabular-nums"><Money cents={groupAvailable} /></p>
+                      <p className="text-xs text-muted-foreground">available</p>
+                    </div>
+                    {group && (
+                      <button
+                        type="button"
+                        className="btn-link text-sm"
+                        aria-label={'Edit group ' + group.name}
+                        onClick={() => setDialog({ kind: 'editor', target: { type: 'group', value: group } })}
+                      >
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 border-t border-foreground/15 pt-2 text-xs text-muted-foreground">
+                  <span>Monthly wants <strong className="font-semibold text-ink">{formatCents(groupWant)}</strong></span>
+                  <span>Net funded <strong className="font-semibold text-ink">{formatCents(groupFunded)}</strong></span>
+                  <span>Spent <strong className="font-semibold text-ink">{formatCents(groupSpent)}</strong></span>
+                </div>
+                {dragOverGroup === section.key && (
+                  <p className="mt-1 text-xs font-medium text-accent" aria-live="polite">
+                    {draggedGroup ? 'Drop to place this group before ' + section.title + '.' : 'Drop to move the bucket to the end of this group.'}
+                  </p>
+                )}
+              </div>
+            }
+            renderItem={(item) => {
+              const bucket = section.items.find((candidate) => candidate.id === item.id)
+              if (!bucket) return null
+              const funded = inOf(bucket)
+              const spent = spentOf(bucket)
+              const bucketMonth = rows.get(bucket.id)
+              const isExpanded = expandedBuckets[bucket.id] ?? false
+              const available = availableOf(bucket)
+              const isDropTarget = dragOverBucket === bucket.id && draggedBucket !== bucket.id
+
+              return (
+                <div
+                  className={
+                    'w-full rounded-xl border bg-sunken/35 px-3 py-2.5 transition-colors ' +
+                    (isDropTarget ? '' : 'border-foreground/20 hover:border-foreground/35 ') +
+                    (bucket.archived ? 'opacity-75 ' : '') +
+                    (draggedBucket === bucket.id ? 'opacity-45' : '')
+                  }
+                  style={isDropTarget ? {
+                    borderColor: 'var(--color-accent)',
+                    backgroundColor: 'var(--color-accent-soft)',
+                    boxShadow: dragPlacement === 'before'
+                      ? 'inset 0 2px var(--color-accent)'
+                      : 'inset 0 -2px var(--color-accent)',
+                  } : undefined}
+                  onDragOver={(event) => allowBucketDrop(event, bucket.id)}
+                  onDrop={(event) => dropOnBucket(event, bucket)}
+                >
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      draggable
+                      aria-label={'Drag to reorder ' + bucket.name}
+                      title="Drag to reorder. Drop on another bucket to place before it, or on a group to move to its end."
+                      className="grid size-7 shrink-0 cursor-grab place-items-center rounded-md text-muted transition hover:bg-sunken hover:text-ink active:cursor-grabbing"
+                      onDragStart={(event) => startBucketDrag(event, bucket.id)}
+                      onDragEnd={endDrag}
+                    >
+                      <GripVertical className="size-4" aria-hidden />
+                    </button>
+                    <span
+                      className="size-2.5 shrink-0 rounded-full"
+                      style={{ backgroundColor: bucket.color ?? group?.color ?? bucketColor(bucket) }}
+                      aria-hidden
+                    />
+                    <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                      <span className="truncate text-base font-semibold">{bucket.name}</span>
+                      {bucket.archived && <span className="rounded-full border border-border bg-sunken px-2 py-0.5 text-xs text-muted-foreground">Archived</span>}
+                      {bucket.kind !== 'spending' && (
+                        <span className="rounded-full border border-border bg-sunken px-2 py-0.5 text-xs text-muted-foreground">
+                          {BUCKET_KIND_LABELS[bucket.kind]}
+                        </span>
+                      )}
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-base font-semibold tabular-nums"><Money cents={available} /></p>
+                      {available < 0 && <p className="text-xs font-medium text-bad">Overspent</p>}
+                    </div>
+                    <button
+                      type="button"
+                      className="btn-link ml-1 text-sm"
+                      aria-label={'Edit ' + bucket.name}
+                      onClick={() => setDialog({ kind: 'editor', target: { type: 'bucket', value: bucket } })}
+                    >
+                      Edit
+                    </button>
+                  </div>
+
+                  <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
+                    <BucketMetric label="Opening balance"><Money cents={bucketMonth?.carryoverCents ?? 0} /></BucketMetric>
+                    <BucketMetric label="Net funded">{funded === 0 ? '—' : <Money cents={funded} />}</BucketMetric>
+                    <BucketMetric label="Spent this month">{spent === 0 ? '—' : formatCents(spent)}</BucketMetric>
+                    <BucketMetric label="Monthly want"><WantCell key={bucket.id + '-' + bucket.monthlyTargetCents} bucket={bucket} /></BucketMetric>
+                    <BucketMetric label="In / Out">
+                      {!bucket.archived
+                        ? <InOutCell name={bucket.name} onSubmit={(cents) => moveInOut(bucket, cents)} />
+                        : <span className="text-xs text-muted">Archived</span>}
+                    </BucketMetric>
+                    <BucketMetric label="Want progress">
+                      {bucket.monthlyTargetCents > 0
+                        ? <span className="text-xs tabular-nums">{formatCents(funded)} / {formatCents(bucket.monthlyTargetCents)}</span>
+                        : <span className="text-xs text-muted">No want set</span>}
+                    </BucketMetric>
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-3 border-t border-foreground/15 pt-2">
+                    {bucket.monthlyTargetCents > 0 ? (
+                      <div className="min-w-32 flex-1 space-y-1">
+                        <ProgressBar pct={(funded / bucket.monthlyTargetCents) * 100} over={funded > bucket.monthlyTargetCents} />
+                        <p className="text-xs text-muted-foreground">
+                          {funded < 0
+                            ? formatCents(-funded) + ' returned to Rain'
+                            : funded >= bucket.monthlyTargetCents
+                              ? 'Fully funded'
+                              : formatCents(bucket.monthlyTargetCents - funded) + ' left to fund'}
+                        </p>
+                      </div>
+                    ) : <span className="flex-1 text-xs text-muted-foreground">Set a monthly want to track funding progress.</span>}
+                    {isDropTarget && (
+                      <span className="text-xs font-medium text-accent">
+                        Drop to place {dragPlacement} this bucket
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      className="btn-link text-sm"
+                      aria-label={(isExpanded ? 'Hide' : 'Show') + ' calculation for ' + bucket.name}
+                      aria-expanded={isExpanded}
+                      aria-controls={'bucket-details-' + bucket.id}
+                      onClick={() => toggleBucketDetails(bucket.id)}
+                    >
+                      {isExpanded ? 'Hide calculation' : 'Show calculation'}
+                    </button>
+                  </div>
+
+                  {isExpanded && bucketMonth && (
+                    <div id={'bucket-details-' + bucket.id} className="mt-3 border-t border-foreground/20 pt-3">
+                      <BucketBreakdown
+                        bucket={bucket}
+                        row={bucketMonth}
+                        month={month}
+                        groupName={groups.find((candidate) => candidate.id === bucket.groupId)?.name ?? 'Ungrouped'}
+                      />
+                    </div>
+                  )}
+                </div>
+              )
+            }}
+          />
         )
       })}
-
       {dialog?.kind === 'rain' && <RainDialog month={month} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'editor' && (
         <div className="card p-4">
@@ -361,7 +524,7 @@ function BucketBreakdown({ bucket, row, month, groupName }: {
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
           <h3 className="font-semibold">{bucket.name}: month calculation</h3>
-          <p className="text-xs text-muted">{groupName} · {BUCKET_KIND_LABELS[bucket.kind]} · {monthLabel(month)}</p>
+          <p className="text-sm text-muted-foreground">{groupName} · {BUCKET_KIND_LABELS[bucket.kind]} · {monthLabel(month)}</p>
         </div>
         <p className="text-xs text-muted">Net funded includes assignments and bucket moves.</p>
       </div>
@@ -375,12 +538,12 @@ function BucketBreakdown({ bucket, row, month, groupName }: {
         <BreakdownValue label="Available at month end" cents={row.availableCents} strong />
       </dl>
 
-      <p className="rounded-lg border border-line bg-surface px-3 py-2 text-xs text-muted">
+      <p className="rounded-lg border border-foreground/20 bg-surface px-3 py-2 text-sm text-muted-foreground">
         {formatCents(row.carryoverCents)} carryover + {formatCents(row.allocatedCents)} assigned + {formatCents(row.movedInCents)} moved in − {formatCents(row.movedOutCents)} moved out − {formatCents(row.spentCents)} spent = <strong className="text-ink">{formatCents(row.availableCents)}</strong> available.
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-xl border border-line bg-surface p-3">
+        <div className="rounded-xl border border-foreground/20 bg-surface p-3">
           <div className="flex items-start justify-between gap-3">
             <div><p className="text-xs font-medium text-muted">Monthly want</p><p className="mt-1 text-lg font-semibold tabular-nums">{formatCents(bucket.monthlyTargetCents)}</p></div>
             <div className="text-right"><p className="text-xs text-muted">Net funded</p><p className="mt-1 text-sm font-semibold tabular-nums">{formatCents(netFunding)}</p></div>
@@ -397,7 +560,7 @@ function BucketBreakdown({ bucket, row, month, groupName }: {
           </> : <p className="mt-2 text-xs text-muted">Set a monthly want to track how much you plan to fund this bucket.</p>}
         </div>
 
-        {hasGoal ? <div className="rounded-xl border border-line bg-surface p-3">
+        {hasGoal ? <div className="rounded-xl border border-foreground/20 bg-surface p-3">
           <div className="flex items-start justify-between gap-3">
             <div><p className="text-xs font-medium text-muted">Goal balance</p><p className="mt-1 text-lg font-semibold tabular-nums">{formatCents(row.availableCents)} <span className="text-sm font-normal text-muted">of {formatCents(bucket.targetCents!)}</span></p></div>
             {bucket.targetDate && <div className="text-right"><p className="text-xs text-muted">Target date</p><p className="mt-1 text-sm font-medium">{dateLabel(bucket.targetDate)}</p></div>}
@@ -408,13 +571,13 @@ function BucketBreakdown({ bucket, row, month, groupName }: {
               : goalRemaining === 0 ? 'Goal reached'
                 : `${Math.round(goalProgress)}% funded · ${formatCents(-goalRemaining)} above goal`}
           </p>
-        </div> : bucket.kind === 'save_until_date' && bucket.targetDate ? <div className="rounded-xl border border-line bg-surface p-3">
+        </div> : bucket.kind === 'save_until_date' && bucket.targetDate ? <div className="rounded-xl border border-foreground/20 bg-surface p-3">
           <p className="text-xs font-medium text-muted">{targetDatePassed ? 'Available this month' : 'Projected at target date'}</p>
           <p className="mt-1 text-lg font-semibold tabular-nums">{formatCents(targetDatePassed ? row.availableCents : projectedAtTarget)}</p>
           {targetDatePassed
             ? <p className="mt-1 text-xs text-muted">Target date was {dateLabel(bucket.targetDate)}.</p>
             : <p className="mt-1 text-xs text-muted">Assuming no spending or withdrawals: {formatCents(bucket.monthlyTargetCents)} per month for {futureDeposits} future {futureDeposits === 1 ? 'deposit' : 'deposits'} through {dateLabel(bucket.targetDate)}.</p>}
-        </div> : <div className="rounded-xl border border-dashed border-line p-3">
+        </div> : <div className="rounded-xl border border-dashed border-foreground/20 p-3">
           <p className="text-xs font-medium text-muted">No balance goal set</p>
           <p className="mt-1 text-xs text-muted">This bucket keeps its available balance until you move or spend it.</p>
         </div>}
@@ -425,8 +588,8 @@ function BucketBreakdown({ bucket, row, month, groupName }: {
 
 function BreakdownValue({ label, cents, strong = false }: { label: string; cents: number; strong?: boolean }) {
   return <div className="rounded-lg bg-surface px-3 py-2">
-    <dt className="text-[11px] text-muted">{label}</dt>
-    <dd className={`mt-1 tabular-nums ${strong ? 'font-semibold' : 'font-medium'}`}><Money cents={cents} /></dd>
+    <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+    <dd className={`mt-1 text-sm tabular-nums ${strong ? 'font-semibold' : 'font-medium'}`}><Money cents={cents} /></dd>
   </div>
 }
 
@@ -443,7 +606,7 @@ function Figure({ label, cents, big = false, accent = false }: {
 }) {
   return (
     <div>
-      <div className={`${big ? 'text-3xl' : 'text-xl'} font-semibold`}>
+      <div className={`${big ? 'text-2xl' : 'text-lg'} font-semibold`}>
         <Money cents={cents} className={accent ? 'text-accent' : ''} />
       </div>
       <div className="text-xs text-muted">{label}</div>
@@ -451,18 +614,30 @@ function Figure({ label, cents, big = false, accent = false }: {
   )
 }
 
+function BucketMetric({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="min-w-0 rounded-lg border border-foreground/10 bg-surface/80 px-2 py-2">
+      <p className="truncate text-xs font-medium text-muted-foreground">{label}</p>
+      <div className="mt-1 min-w-0 text-sm font-semibold tabular-nums">{children}</div>
+    </div>
+  )
+}
+
 function InOutCell({ name, onSubmit }: { name: string; onSubmit: (cents: number) => Promise<string | null> }) {
   const [value, setValue] = useState('')
   const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
 
   async function submit() {
-    if (!value.trim()) return
+    if (!value.trim() || busy) return
     const cents = parseSignedDollars(value)
     if (cents === null) {
       setError('Invalid amount')
       return
     }
+    setBusy(true)
     const problem = await onSubmit(cents)
+    setBusy(false)
     if (problem) setError(problem)
     else {
       setError('')
@@ -471,18 +646,31 @@ function InOutCell({ name, onSubmit }: { name: string; onSubmit: (cents: number)
   }
 
   return (
-    <div>
-      <input
-        aria-label={`Put in or take out of ${name}`}
-        title="Type an amount and press Enter. Use a minus sign to take money out."
-        className="input-bare"
-        inputMode="decimal"
-        placeholder="In / Out"
-        value={value}
-        onChange={(e) => { setValue(e.target.value); setError('') }}
-        onKeyDown={(e) => e.key === 'Enter' && submit()}
-      />
-      {error && <div className="px-2 text-right text-xs text-bad">{error}</div>}
+    <div className="min-w-0">
+      <div className="flex items-center gap-1">
+        <input
+          aria-label={`Put in or take out of ${name}`}
+          title="Enter a positive amount to assign from Rain, or a negative amount to return to Rain."
+          className="min-w-0 flex-1 rounded-md border border-foreground/20 bg-surface px-2 py-1 text-right text-sm tabular-nums outline-none placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent/25"
+          inputMode="decimal"
+          autoComplete="off"
+          placeholder="+/− amount"
+          value={value}
+          onChange={(e) => { setValue(e.target.value); setError('') }}
+          onKeyDown={(e) => e.key === 'Enter' && void submit()}
+        />
+        <button
+          type="button"
+          aria-label={`Apply amount for ${name}`}
+          title="Apply amount"
+          className="grid size-8 shrink-0 place-items-center rounded-md border border-foreground/20 text-foreground transition hover:border-accent hover:bg-accent-soft hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+          disabled={!value.trim() || busy}
+          onClick={() => void submit()}
+        >
+          {busy ? <span className="size-3 animate-spin rounded-full border-2 border-line border-t-accent" aria-hidden /> : <Check className="size-3.5" aria-hidden />}
+        </button>
+      </div>
+      {error && <div className="mt-0.5 text-right text-xs leading-4 text-bad">{error}</div>}
     </div>
   )
 }
@@ -503,16 +691,20 @@ function WantCell({ bucket }: { bucket: Bucket }) {
   }
 
   return (
-    <input
-      aria-label={`Monthly want for ${bucket.name}`}
-      className="input-bare"
-      inputMode="decimal"
-      placeholder="0.00"
-      value={value}
-      onChange={(e) => setValue(e.target.value)}
-      onBlur={save}
-      onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-    />
+    <div className="flex min-w-0 items-center justify-end gap-0.5 rounded-md border border-foreground/20 bg-surface px-1.5 py-0.5 transition-colors hover:border-muted focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/25">
+      <span className="text-xs text-muted" aria-hidden>$</span>
+      <input
+        aria-label={`Monthly want for ${bucket.name}`}
+        title="Edit the monthly want. Press Enter or leave the field to save."
+        className="w-[4.5rem] min-w-0 bg-transparent py-0.5 text-right text-sm tabular-nums outline-none placeholder:text-muted/70"
+        inputMode="decimal"
+        placeholder="0.00"
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+      />
+    </div>
   )
 }
 

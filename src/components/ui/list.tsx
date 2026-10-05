@@ -37,6 +37,14 @@ export interface ListProps extends React.HTMLAttributes<HTMLDivElement> {
   filterTabs?: ListFilterTab[];
   /** Default active filter tab ID */
   defaultFilterId?: string;
+  /** Replace the standard title block with a custom header. */
+  headerContent?: React.ReactNode;
+  /** Render a custom row body while keeping the shared list container and spacing. */
+  renderItem?: (item: ListItemData) => React.ReactNode;
+  /** Message shown when the list has no items. */
+  emptyMessage?: string;
+  /** Tighter card and row spacing for dense data lists. */
+  density?: 'default' | 'compact';
   /**
    * Fixed height class for the scrollable container to prevent height jumps when toggling tabs.
    * Defaults to "h-[300px]". Pass "h-[240px]" or any custom height.
@@ -61,6 +69,10 @@ export function List({
   filterTabs = defaultTabs,
   defaultFilterId = 'all',
   heightClass = 'h-[300px]',
+  headerContent,
+  renderItem,
+  emptyMessage = 'No transactions found for this filter',
+  density = 'default',
   ...props
 }: ListProps) {
   const [activeFilter, setActiveFilter] = React.useState(defaultFilterId);
@@ -74,15 +86,19 @@ export function List({
   return (
     <div
       className={cn(
-        'w-full rounded-3xl bg-card border border-border/70 p-5 shadow-xl flex flex-col',
+        density === 'compact'
+          ? 'w-full rounded-xl bg-card border border-border/70 p-2.5 shadow-sm flex flex-col'
+          : 'w-full rounded-3xl bg-card border border-border/70 p-5 shadow-xl flex flex-col',
         className,
       )}
       {...props}
     >
       {/* List Header */}
-      {(title || subtitle || actionLabel) && (
-        <div className="flex items-center justify-between mb-3 px-1">
-          <div>
+      {headerContent ? (
+        <div className={density === 'compact' ? 'mb-2' : 'mb-3'}>{headerContent}</div>
+      ) : (title || subtitle || actionLabel) && (
+        <div className="mb-3 flex items-center justify-between gap-3 px-1">
+          <div className="min-w-0">
             {title && (
               <h3 className="text-base font-bold tracking-tight text-foreground">
                 {title}
@@ -98,10 +114,10 @@ export function List({
               variant="ghost"
               size="sm"
               onClick={onActionClick}
-              className="text-xs text-muted-foreground hover:text-foreground h-8 px-2.5 rounded-full hover:bg-sunken/70"
+              className="inline-flex h-8 shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 text-xs text-muted-foreground hover:bg-sunken/70 hover:text-foreground"
             >
-              <span>{actionLabel}</span>
-              <ChevronRight className="size-3.5 ml-1" />
+              <span className="whitespace-nowrap">{actionLabel}</span>
+              <ChevronRight className="ml-0.5 size-3.5 shrink-0" />
             </Button>
           )}
         </div>
@@ -137,12 +153,28 @@ export function List({
           heightClass,
         )}
       >
-        {filteredItems.length === 0 ? (
-          <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground">
-            No transactions found for this filter
+        {filteredItems.length === 0 ? emptyMessage ? (
+          <div className="flex min-h-10 w-full items-center justify-center px-2 text-center text-xs text-muted-foreground">
+            {emptyMessage}
           </div>
-        ) : (
+        ) : null : (
           filteredItems.map((item) => {
+            if (renderItem) {
+              return (
+                <div
+                  key={item.id}
+                  onClick={() => onItemClick?.(item)}
+                  className={cn(
+                    'group relative flex items-center justify-between rounded-2xl transition-all duration-200 select-none',
+                    density === 'compact' ? 'p-1' : 'p-3',
+                    onItemClick ? 'cursor-pointer' : 'cursor-default',
+                    'hover:bg-sunken/70 border border-transparent hover:border-border/40',
+                  )}
+                >
+                  {renderItem(item)}
+                </div>
+              )
+            }
             const IconComponent = item.icon;
 
             return (

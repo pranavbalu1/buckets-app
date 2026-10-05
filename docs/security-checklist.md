@@ -10,7 +10,7 @@ Complete these checks before publishing a deployment and after changing database
 - [ ] Without a session, request `GET /rest/v1/accounts?select=id` with the anon key. It must return no account rows.
 - [ ] Sign in and confirm the owner can load and change their own rows.
 - [ ] Confirm the frontend and static-host environment use only `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`.
-- [ ] Search tracked files, build settings, and GitHub secrets for service-role keys. They must not be present in frontend code or exposed as `VITE_` values.
+- [ ] Search tracked files, build output, and host settings to confirm no service-role key is in frontend code or exposed as a `VITE_` value. If scheduled backup is enabled, keep it only as the encrypted `SUPABASE_SERVICE_ROLE_KEY` Actions secret and restrict repository/workflow access.
 - [ ] Keep JSON backups private. They include the complete personal ledger and planning data.
 
 Example unauthenticated request:

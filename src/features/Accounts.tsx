@@ -7,6 +7,7 @@ import {
   History,
   Pencil,
   RotateCcw,
+  Trash2,
   WalletCards,
 } from 'lucide-react'
 import QuickAdd from './QuickAdd'
@@ -16,21 +17,36 @@ import { FormField } from '../components/ui/form-field'
 import { Input } from '../components/ui/input'
 import { Modal } from '../components/ui/modal'
 import { Select } from '../components/ui/select'
-import { formatCents } from '../domain/money'
+import { formatCents, parseDollars } from '../domain/money'
 import { TYPE_LABELS } from '../domain/describe'
 import { computeBalances } from '../domain/balances'
+import { makeEvent } from '../domain/events'
+import { todayString } from '../domain/dates'
 import { ACCOUNT_TYPES, ACCOUNT_TYPE_LABELS } from '../domain/models'
 import type { Account, AccountType } from '../domain/models'
+import type { LedgerEvent } from '../domain/types'
 import { useLedger } from '../storage/store'
 
 export default function Accounts() {
-  const { accounts, events, addAccount } = useLedger()
+  const { accounts, events, addAccount, addEvent, removeAccount } = useLedger()
   const balances = useMemo(() => computeBalances(events), [events])
   const [name, setName] = useState('')
   const [type, setType] = useState<AccountType>('checking')
+  const [startingBalance, setStartingBalance] = useState('')
+  const [formError, setFormError] = useState('')
+  const [savingAccount, setSavingAccount] = useState(false)
+  const [pendingOpeningBalance, setPendingOpeningBalance] = useState<{
+    accountId: string
+    accountName: string
+    amountCents: number
+  } | null>(null)
+  const [retryingBalance, setRetryingBalance] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
   const [depositOpen, setDepositOpen] = useState(false)
   const [historyAccount, setHistoryAccount] = useState<Account | null>(null)
+  const [accountToDelete, setAccountToDelete] = useState<Account | null>(null)
+  const [deletingAccount, setDeletingAccount] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
   const [draggedId, setDraggedId] = useState<string | null>(null)
 
   const visible = accounts.filter((account) => showArchived || !account.archived)
@@ -55,8 +71,58 @@ export default function Accounts() {
   async function submit(event: React.FormEvent) {
     event.preventDefault()
     const trimmed = name.trim()
-    if (!trimmed) return
-    if (await addAccount(trimmed, type)) setName('')
+    if (!trimmed || savingAccount || pendingOpeningBalance) return
+    setFormError('')
+    const rawBalance = startingBalance.trim()
+    const negative = rawBalance.startsWith('-')
+    const unsignedBalance = rawBalance.replace(/^[+-]/, '')
+    const parsedBalance = rawBalance ? parseDollars(unsignedBalance) : 0
+    if (parsedBalance === null) {
+      setFormError('Enter a valid balance, like 1250.00 or -1250.00.')
+      return
+    }
+
+    const openingBalanceCents = negative ? -parsedBalance : parsedBalance
+    setSavingAccount(true)
+    const result = await addAccount(trimmed, type, openingBalanceCents)
+    setSavingAccount(false)
+    if (!result.account) return
+
+    setName('')
+    if (!result.openingBalanceSaved) {
+      setPendingOpeningBalance({ accountId: result.account.id, accountName: result.account.name, amountCents: openingBalanceCents })
+      return
+    }
+    setStartingBalance('')
+  }
+
+  async function retryOpeningBalance() {
+    if (!pendingOpeningBalance || retryingBalance) return
+    setRetryingBalance(true)
+    const amountCents = pendingOpeningBalance.amountCents
+    const saved = await addEvent(makeEvent({
+      type: 'adjustment',
+      date: todayString(),
+      amountCents: Math.abs(amountCents),
+      accountId: pendingOpeningBalance.accountId,
+      direction: amountCents > 0 ? 'in' : 'out',
+      description: 'Opening balance',
+    }))
+    setRetryingBalance(false)
+    if (saved) {
+      setPendingOpeningBalance(null)
+      setStartingBalance('')
+    }
+  }
+
+  async function confirmDeleteAccount() {
+    if (!accountToDelete || deletingAccount) return
+    setDeletingAccount(true)
+    setDeleteError('')
+    const deleted = await removeAccount(accountToDelete.id)
+    setDeletingAccount(false)
+    if (deleted) setAccountToDelete(null)
+    else setDeleteError(useLedger.getState().error || 'The account could not be deleted. Please try again.')
   }
 
   return (
@@ -88,21 +154,50 @@ export default function Accounts() {
             <h2 className="mt-1 text-lg font-semibold tracking-tight">Add an account</h2>
             <p className="mt-1 text-sm text-muted">Track the places where you keep your money.</p>
           </div>
-          <form onSubmit={submit} className="flex flex-col gap-3 sm:flex-row sm:items-end">
+          <form onSubmit={(event) => void submit(event)} className="grid gap-3 sm:grid-cols-[minmax(0,1.25fr)_minmax(9rem,0.8fr)_minmax(9rem,0.8fr)_auto] sm:items-end">
             <FormField label="Account name" htmlFor="new-account-name" required>
-              <Input id="new-account-name" className="min-w-36" placeholder="e.g. Everyday checking" value={name} onChange={(event) => setName(event.target.value)} />
+              <Input id="new-account-name" className="min-w-0" placeholder="e.g. Everyday checking" value={name} disabled={Boolean(pendingOpeningBalance) || savingAccount} onChange={(event) => setName(event.target.value)} />
             </FormField>
             <FormField label="Account type" htmlFor="new-account-type">
               <Select
                 id="new-account-type"
                 value={type}
                 onChange={(event) => setType(event.target.value as AccountType)}
+                disabled={Boolean(pendingOpeningBalance) || savingAccount}
                 options={ACCOUNT_TYPES.map((item) => ({ value: item, label: ACCOUNT_TYPE_LABELS[item] }))}
                 className="h-[42px] rounded-lg border-line bg-surface shadow-none focus-visible:border-accent focus-visible:ring-accent/30"
               />
             </FormField>
-            <Button variant="primary" className="shrink-0 sm:mb-0.5"><WalletCards className="size-4" /> Add account</Button>
+            <FormField
+              label="Starting/current balance"
+              htmlFor="new-account-balance"
+              error={formError}
+              helperText={type === 'credit_card' ? 'Enter the amount owed as a negative value.' : 'Optional. Enter a negative value for debt.'}
+            >
+              <Input
+                id="new-account-balance"
+                inputMode="decimal"
+                placeholder="0.00"
+                value={startingBalance}
+                disabled={Boolean(pendingOpeningBalance) || savingAccount}
+                onChange={(event) => { setStartingBalance(event.target.value); setFormError('') }}
+                aria-invalid={Boolean(formError)}
+              />
+            </FormField>
+            <Button type="submit" variant="primary" disabled={savingAccount || Boolean(pendingOpeningBalance)} className="shrink-0 sm:mb-0.5">
+              <WalletCards className="size-4" /> {savingAccount ? 'Adding…' : 'Add account'}
+            </Button>
           </form>
+          {pendingOpeningBalance && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-bad/25 bg-bad-soft/50 px-3 py-2.5" role="alert">
+              <p className="min-w-0 text-xs text-muted">
+                <strong className="text-ink">{pendingOpeningBalance.accountName}</strong> was created, but its starting balance ({formatCents(pendingOpeningBalance.amountCents)}) was not saved.
+              </p>
+              <Button size="sm" variant="secondary" disabled={retryingBalance} onClick={() => void retryOpeningBalance()}>
+                {retryingBalance ? 'Saving…' : 'Retry balance'}
+              </Button>
+            </div>
+          )}
         </Card>
       </div>
 
@@ -133,7 +228,8 @@ export default function Accounts() {
               onDrop={() => {
                 if (draggedId) void reorder(draggedId, account.id)
                 setDraggedId(null)
-              }} />
+              }}
+              onDelete={() => { setDeleteError(''); setAccountToDelete(account) }} />
           ))}
         </ul>
       )}
@@ -147,17 +243,37 @@ export default function Accounts() {
       {historyAccount && <Modal title={`${historyAccount.name} history`} onClose={() => setHistoryAccount(null)}>
         <AccountHistory account={historyAccount} />
       </Modal>}
+
+      {accountToDelete && <Modal title="Delete account?" onClose={() => { if (!deletingAccount) setAccountToDelete(null) }}>
+        <div className="space-y-4">
+          <div className="rounded-xl border border-bad/25 bg-bad-soft/50 p-3.5">
+            <p className="font-semibold text-ink">{accountToDelete.name}</p>
+            <p className="mt-1 text-xs text-muted">Current balance: {formatCents(balances.accounts[accountToDelete.id] ?? 0)} · {events.filter((event) => event.accountId === accountToDelete.id || event.toAccountId === accountToDelete.id).length} linked ledger entries</p>
+          </div>
+          <p className="text-sm leading-6 text-muted">
+            This permanently deletes the account and its linked income, expenses, adjustments, transfers, scheduled items, paycheck templates, and reconciliation history. Removing linked transactions can change bucket balances. This cannot be undone.
+          </p>
+          {deleteError && <p className="text-sm text-bad" role="alert">{deleteError}</p>}
+          <div className="flex justify-end gap-2">
+            <Button type="button" disabled={deletingAccount} onClick={() => setAccountToDelete(null)}>Keep account</Button>
+            <Button type="button" variant="danger" disabled={deletingAccount} onClick={() => void confirmDeleteAccount()}>
+              <Trash2 className="size-4" /> {deletingAccount ? 'Deleting…' : 'Delete account'}
+            </Button>
+          </div>
+        </div>
+      </Modal>}
     </div>
   )
 }
 
-function AccountRow({ account, balance, onHistory, onDragStart, onDragEnd, onDrop }: {
+function AccountRow({ account, balance, onHistory, onDragStart, onDragEnd, onDrop, onDelete }: {
   account: Account
   balance: number
   onHistory: () => void
   onDragStart: () => void
   onDragEnd: () => void
   onDrop: () => void
+  onDelete: () => void
 }) {
   const updateAccount = useLedger((state) => state.updateAccount)
   const [editing, setEditing] = useState(false)
@@ -226,6 +342,9 @@ function AccountRow({ account, balance, onHistory, onDragStart, onDragEnd, onDro
           <button className="grid size-8 place-items-center rounded-lg text-muted transition hover:bg-sunken hover:text-ink" aria-label={account.archived ? `Restore ${account.name}` : `Archive ${account.name}`} title={account.archived ? 'Restore account' : 'Archive account'} onClick={() => updateAccount(account.id, { archived: !account.archived })}>
             {account.archived ? <RotateCcw className="size-3.5" /> : <Archive className="size-3.5" />}
           </button>
+          <button className="grid size-8 place-items-center rounded-lg text-muted transition hover:bg-bad-soft hover:text-bad" aria-label={`Delete ${account.name}`} title="Delete account" onClick={onDelete}>
+            <Trash2 className="size-3.5" />
+          </button>
         </div>
       </Card>
     </li>
@@ -234,12 +353,49 @@ function AccountRow({ account, balance, onHistory, onDragStart, onDragEnd, onDro
 
 function AccountHistory({ account }: { account: Account }) {
   const events = useLedger((state) => state.events)
-  const relevant = events.filter((event) => event.accountId === account.id || event.toAccountId === account.id)
-    .slice().sort((a, b) => b.date.localeCompare(a.date))
-  return relevant.length ? <ul className="divide-y divide-border/70">
-    {relevant.map((event) => <li key={event.id} className="flex items-center justify-between gap-3 py-3">
-      <span className="min-w-0"><strong className="block truncate text-sm">{event.description || TYPE_LABELS[event.type]}</strong><span className="text-xs text-muted-foreground">{event.date} · {TYPE_LABELS[event.type]}</span></span>
-      <strong className="shrink-0 tabular-nums">{formatCents(event.amountCents)}</strong>
-    </li>)}
-  </ul> : <p className="py-8 text-center text-sm text-muted-foreground">No history for this account yet.</p>
+  const history = useMemo(() => buildAccountHistory(events, account.id), [events, account.id])
+  const currentBalance = history[0]?.balanceAfter ?? 0
+
+  return <div>
+    <div className="mb-2 flex items-center justify-between gap-3 rounded-lg bg-sunken px-3 py-2.5">
+      <span className="text-xs text-muted">Current balance</span>
+      <strong className="tabular-nums">{formatCents(currentBalance)}</strong>
+    </div>
+    {history.length ? <ul className="divide-y divide-border/70">
+      {history.map(({ event, change, balanceAfter }) => <li key={event.id} className="flex items-center justify-between gap-3 py-3">
+        <span className="min-w-0"><strong className="block truncate text-sm">{event.description || TYPE_LABELS[event.type]}</strong><span className="text-xs text-muted-foreground">{event.date} · {TYPE_LABELS[event.type]}</span></span>
+        <span className="shrink-0 text-right">
+          <strong className={`block tabular-nums ${change > 0 ? 'text-good' : change < 0 ? 'text-bad' : ''}`}>{change > 0 ? '+' : ''}{formatCents(change)}</strong>
+          <span className="text-[10px] text-muted-foreground">balance {formatCents(balanceAfter)}</span>
+        </span>
+      </li>)}
+    </ul> : <p className="py-8 text-center text-sm text-muted-foreground">No history for this account yet.</p>}
+  </div>
+}
+
+function buildAccountHistory(events: LedgerEvent[], accountId: string) {
+  const chronological = events.flatMap((event, index) => {
+    const change = accountChange(event, accountId)
+    return change === null ? [] : [{ event, index, change }]
+  }).sort((a, b) => a.event.date.localeCompare(b.event.date) || a.index - b.index)
+  let balance = 0
+  return chronological.map((item) => {
+    balance += item.change
+    return { ...item, balanceAfter: balance }
+  }).reverse()
+}
+
+function accountChange(event: LedgerEvent, accountId: string): number | null {
+  switch (event.type) {
+    case 'income': return event.accountId === accountId ? event.amountCents : null
+    case 'expense': return event.accountId === accountId ? -event.amountCents : null
+    case 'account_transfer':
+      if (event.accountId === accountId) return -event.amountCents
+      if (event.toAccountId === accountId) return event.amountCents
+      return null
+    case 'adjustment':
+      return event.accountId === accountId ? (event.direction === 'in' ? event.amountCents : -event.amountCents) : null
+    case 'allocation':
+    case 'bucket_move': return null
+  }
 }

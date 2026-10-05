@@ -26,5 +26,6 @@ dist-ssr
 .env
 .env.*
 !.env.example
+!.env.demo.example
 .local
 buckets-backup-*.json

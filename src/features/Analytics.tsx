@@ -1,36 +1,114 @@
 import { useMemo, useState } from 'react'
 import { addMonths, addWeeks, addYears, format } from 'date-fns'
 import { ArrowLeft, ArrowRight, BarChart3, CircleDollarSign, ReceiptText, WalletCards } from 'lucide-react'
-import {
-  Bar, BarChart, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart,
-  ResponsiveContainer, Tooltip, XAxis, YAxis,
-} from 'recharts'
 import { Button } from '../components/ui/button'
 import { Card } from '../components/ui/card'
+import { AreaLineGraph, BudgetGaugeGraph, SemiGaugeGraph, StackedBarGraph } from '../components/ui/charts'
 import { MetricCard } from '../components/ui/metric-card'
+import { Select } from '../components/ui/select'
 import { SegmentedControl } from '../components/ui/segmented-control'
 import { buildAnalytics } from '../domain/analytics'
 import type { AnalyticsPeriod } from '../domain/analytics'
 import { todayString } from '../domain/dates'
 import { formatCents } from '../domain/money'
 import { useLedger } from '../storage/store'
-import MoneyFlowSankey from './MoneyFlowSankey'
+import SankeyChart from '../components/ui/sankey-chart'
 
 const CHART_COLORS = ['#e6ff4b', '#00bdf9', '#03d791', '#f59e0b', '#a855f7', '#f43f5e', '#14b8a6', '#6366f1']
+const STACK_COLORS = ['bg-[#e6ff4b]', 'bg-[#b0cc29]', 'bg-[#6d8218]', 'bg-[#42500d]', 'bg-[#00bdf9]']
 
 export default function Analytics() {
   const { events, buckets, groups } = useLedger()
   const [period, setPeriod] = useState<AnalyticsPeriod>('month')
   const [selectedDate, setSelectedDate] = useState(todayString())
+  const [budgetGroupId, setBudgetGroupId] = useState('all')
+  const [budgetBucketId, setBudgetBucketId] = useState('all')
   const summary = useMemo(() => buildAnalytics(events, buckets, period, selectedDate), [events, buckets, period, selectedDate])
   const changePeriod = (direction: -1 | 1) => {
     const date = new Date(`${selectedDate}T12:00:00`)
     const next = period === 'week' ? addWeeks(date, direction) : period === 'year' ? addYears(date, direction) : addMonths(date, direction)
     setSelectedDate(format(next, 'yyyy-MM-dd'))
   }
-  const budgetRows = summary.budget.slice(0, 8).map((row) => ({ name: row.name, Planned: (row.planned ?? 0) / 100, Spent: row.amount / 100 }))
-  const pieRows = summary.spendingByBucket.slice(0, 7).map((row) => ({ name: row.name, value: row.amount / 100 }))
-  const moneyTooltip = (value: unknown) => formatCents(Number(value ?? 0) * 100)
+  const topSpendRows = summary.spendingByBucket.slice(0, 4)
+  const otherSpendRows = summary.spendingByBucket.slice(4)
+  const otherSpendCents = otherSpendRows.reduce((total, row) => total + row.amount, 0)
+  const stackCategories = [
+    ...topSpendRows.map((row, index) => ({ key: row.id, label: row.name, color: STACK_COLORS[index] })),
+    ...(otherSpendCents > 0 ? [{ key: 'other', label: 'Other', color: STACK_COLORS[4] }] : []),
+  ]
+  const categoryByBucketId = new Map<string, string>()
+  for (const [index, row] of summary.spendingByBucket.entries()) {
+    categoryByBucketId.set(row.id, index < 4 ? row.id : 'other')
+  }
+  const monthLabels = period === 'month'
+    ? Array.from({ length: Math.ceil(new Date(Number(selectedDate.slice(0, 4)), Number(selectedDate.slice(5, 7)), 0).getDate() / 7) }, (_, index) => `Week ${index + 1}`)
+    : summary.points.map((point) => point.label)
+  const categorySpendByPeriod = new Map<string, Map<string, number>>()
+  for (const event of summary.periodEvents) {
+    if (event.type !== 'expense') continue
+    const date = new Date(`${event.date}T12:00:00`)
+    const label = period === 'month' ? `Week ${Math.ceil(date.getDate() / 7)}` : format(date, period === 'year' ? 'MMM' : 'EEE')
+    const category = categoryByBucketId.get(event.bucketId ?? '')
+    if (!category) continue
+    const amounts = categorySpendByPeriod.get(label) ?? new Map<string, number>()
+    amounts.set(category, (amounts.get(category) ?? 0) + event.amountCents)
+    categorySpendByPeriod.set(label, amounts)
+  }
+  const spendingBars = monthLabels.map((label) => ({
+    label,
+    segments: stackCategories.flatMap((category) => {
+      const cents = categorySpendByPeriod.get(label)?.get(category.key) ?? 0
+      return cents > 0 ? [{ ...category, value: cents / 100 }] : []
+    }),
+  }))
+  const spendingLegend = stackCategories.map(({ label, color }) => ({ label, color }))
+  const pieRows = summary.spendingByBucket.slice(0, 4).map((row) => ({ name: row.name, amount: row.amount }))
+  if (otherSpendCents > 0) pieRows.push({ name: 'Other', amount: otherSpendCents })
+  const piePercentages = pieRows.map((row) => Math.floor(summary.spendingCents > 0 ? row.amount / summary.spendingCents * 100 : 0))
+  const unassignedPiePercent = 100 - piePercentages.reduce((total, percentage) => total + percentage, 0)
+  const spendingCategories = pieRows.map((row, index) => {
+    const percentage = index === pieRows.length - 1
+      ? Math.max(0, piePercentages[index] + unassignedPiePercent)
+      : piePercentages[index]
+    return {
+      label: row.name,
+      percentage,
+      amount: formatCents(row.amount),
+      color: CHART_COLORS[index % CHART_COLORS.length],
+    }
+  })
+  const activeBuckets = buckets.filter((bucket) => !bucket.archived)
+  const targetScale = period === 'year' ? 12 : period === 'week' ? 1 / 4.33 : 1
+  const groupOptions = [
+    { value: 'all', label: 'All groups' },
+    ...groups.map((group) => ({ value: group.id, label: group.name })),
+    { value: 'ungrouped', label: 'Ungrouped' },
+  ]
+  const bucketOptions = [
+    { value: 'all', label: 'All buckets' },
+    ...activeBuckets.map((bucket) => {
+      const groupName = groups.find((group) => group.id === bucket.groupId)?.name
+      return { value: bucket.id, label: groupName ? `${groupName} / ${bucket.name}` : bucket.name }
+    }),
+  ]
+  const totalBudget = activeBuckets.reduce((total, bucket) => total + Math.round(bucket.monthlyTargetCents * targetScale), 0)
+  const groupBucketIds = new Set(activeBuckets
+    .filter((bucket) => budgetGroupId === 'all' || (budgetGroupId === 'ungrouped' ? !bucket.groupId : bucket.groupId === budgetGroupId))
+    .map((bucket) => bucket.id))
+  const groupBudget = budgetGroupId === 'all'
+    ? totalBudget
+    : activeBuckets.filter((bucket) => groupBucketIds.has(bucket.id)).reduce((total, bucket) => total + Math.round(bucket.monthlyTargetCents * targetScale), 0)
+  const groupSpent = budgetGroupId === 'all'
+    ? summary.spendingCents
+    : summary.budget.filter((row) => groupBucketIds.has(row.id)).reduce((total, row) => total + row.amount, 0)
+  const bucketBudget = budgetBucketId === 'all'
+    ? totalBudget
+    : Math.round((activeBuckets.find((bucket) => bucket.id === budgetBucketId)?.monthlyTargetCents ?? 0) * targetScale)
+  const bucketSpent = budgetBucketId === 'all'
+    ? summary.spendingCents
+    : summary.budget.find((row) => row.id === budgetBucketId)?.amount ?? 0
+  const selectedGroupLabel = groupOptions.find((option) => option.value === budgetGroupId)?.label ?? 'Selected group'
+  const selectedBucketLabel = bucketOptions.find((option) => option.value === budgetBucketId)?.label ?? 'Selected bucket'
 
   return (
     <div className="space-y-5 md:space-y-6">
@@ -64,65 +142,61 @@ export default function Analytics() {
         <MetricCard type="compact" priority="low" title="Average expense" amount={formatCents(summary.averageExpenseCents)} subtitle={`${summary.largestExpenses.length ? 'Largest expense' : 'No expenses'}${summary.largestExpenses[0] ? ` · ${formatCents(summary.largestExpenses[0].amountCents)}` : ''}`} />
       </section>
 
+      <div className="grid items-stretch gap-4 xl:grid-cols-[2fr_1fr]">
+        {spendingBars.some((row) => row.segments.length > 0) ? (
+          <StackedBarGraph
+            key={period}
+            title="Spending by category"
+            data={spendingBars}
+            legend={spendingLegend}
+            timeframeOptions={['Week', 'Month', 'Year']}
+            defaultTimeframe={period[0].toUpperCase() + period.slice(1)}
+            onTimeframeChange={(value) => setPeriod(value.toLowerCase() as AnalyticsPeriod)}
+            className="h-full"
+          />
+        ) : (
+          <Card className="p-4 sm:p-5"><h2 className="font-semibold">Spending by category</h2><EmptyChart>No spending recorded in this period.</EmptyChart></Card>
+        )}
+        {spendingCategories.length ? (
+          <SemiGaugeGraph title="Spending by bucket" amount={formatCents(summary.spendingCents)} categories={spendingCategories} />
+        ) : (
+          <Card className="p-4 sm:p-5"><h2 className="font-semibold">Spending by bucket</h2><EmptyChart>No spending recorded in this period.</EmptyChart></Card>
+        )}
+      </div>
+
+      <AreaLineGraph
+        title="Spending trend"
+        subtitle={`${summary.title} · ${period === 'year' ? 'Monthly' : 'Daily'} totals`}
+        data={summary.points.map((point) => ({ label: point.label, value: point.spending / 100 }))}
+        strokeColor="#e6ff4b"
+        gradientStart="rgba(230, 255, 75, 0.28)"
+        gradientStop="rgba(230, 255, 75, 0)"
+      />
+
       <Card className="p-4 sm:p-5">
-        <div className="mb-4 flex items-center gap-2"><BarChart3 className="size-4 text-primary" /><div><h2 className="font-semibold">Activity over time</h2><p className="text-xs text-muted-foreground">Daily within a week or month; monthly within a year.</p></div></div>
-        <div className="h-72 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={summary.points} margin={{ top: 8, right: 10, bottom: 0, left: 4 }}>
-              <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="label" stroke="var(--color-muted)" tickLine={false} axisLine={false} tick={{ fontSize: 11 }} />
-              <YAxis stroke="var(--color-muted)" tickLine={false} axisLine={false} tick={{ fontSize: 10 }} tickFormatter={(value) => `$${value / 100}`} />
-              <Tooltip formatter={(_, name, item) => [formatCents(Number(item?.value ?? 0)), String(name)]} contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-line)', borderRadius: 12 }} />
-              <Legend />
-              <Line type="monotone" dataKey="income" name="Income" stroke="#00bdf9" strokeWidth={2.5} dot={false} />
-              <Line type="monotone" dataKey="spending" name="Spending" stroke="#f59e0b" strokeWidth={2.5} dot={false} />
-              <Line type="monotone" dataKey="savings" name="Savings contributions" stroke="#e6ff4b" strokeWidth={2.5} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2"><WalletCards className="size-4 text-primary" /><div><h2 className="font-semibold">Budget vs. actual</h2><p className="text-xs text-muted-foreground">Spent, budget, and remaining for this {period}.</p></div></div>
+          <span className="rounded-lg bg-sunken px-3 py-2 text-xs text-muted-foreground">Total budget <strong className="ml-1 text-foreground">{formatCents(totalBudget)}</strong></span>
+        </div>
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <div className="min-w-0 space-y-2">
+            <div className="flex h-[3.625rem] items-end pb-1 text-xs font-medium text-muted-foreground">Overall view</div>
+            <BudgetGaugeGraph title="All spending" subtitle="Every recorded expense" budgetCents={totalBudget} spentCents={summary.spendingCents} />
+          </div>
+          <div className="min-w-0 space-y-2">
+            <label className="block space-y-1 text-xs font-medium text-muted-foreground">Group view
+              <Select aria-label="Select budget group" value={budgetGroupId} onChange={(event) => setBudgetGroupId(event.target.value)} options={groupOptions} />
+            </label>
+            <BudgetGaugeGraph title={selectedGroupLabel} subtitle="Selected group" budgetCents={groupBudget} spentCents={groupSpent} />
+          </div>
+          <div className="min-w-0 space-y-2">
+            <label className="block space-y-1 text-xs font-medium text-muted-foreground">Bucket view
+              <Select aria-label="Select budget bucket" value={budgetBucketId} onChange={(event) => setBudgetBucketId(event.target.value)} options={bucketOptions} />
+            </label>
+            <BudgetGaugeGraph title={selectedBucketLabel} subtitle="Selected bucket" budgetCents={bucketBudget} spentCents={bucketSpent} />
+          </div>
         </div>
       </Card>
-
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Card className="p-4 sm:p-5">
-          <div className="mb-4 flex items-center gap-2"><WalletCards className="size-4 text-primary" /><div><h2 className="font-semibold">Budget vs. actual</h2><p className="text-xs text-muted-foreground">Monthly targets are scaled for the selected period.</p></div></div>
-          {budgetRows.length ? <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={budgetRows} layout="vertical" margin={{ top: 2, right: 12, bottom: 4, left: 10 }}>
-                <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" horizontal={false} />
-                <XAxis type="number" stroke="var(--color-muted)" tickLine={false} axisLine={false} tick={{ fontSize: 10 }} tickFormatter={(value) => `$${value}`} />
-                <YAxis type="category" dataKey="name" width={100} stroke="var(--color-muted)" tickLine={false} axisLine={false} tick={{ fontSize: 10 }} />
-                <Tooltip formatter={moneyTooltip} contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-line)', borderRadius: 12 }} />
-                <Legend />
-                <Bar dataKey="Planned" fill="#00bdf9" radius={[0, 4, 4, 0]} />
-                <Bar dataKey="Spent" fill="#e6ff4b" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div> : <EmptyChart>No budget targets or spending in this period.</EmptyChart>}
-          {budgetRows.length > 0 && <ul className="mt-3 divide-y divide-border/60 border-t border-border/60">
-            {summary.budget.slice(0, 5).map((row) => {
-              const remaining = (row.planned ?? 0) - row.amount
-              return <li key={row.id} className="flex items-center justify-between gap-3 py-2 text-xs"><span className="truncate">{row.name}</span><span className={remaining < 0 ? 'shrink-0 font-medium text-destructive' : 'shrink-0 text-muted-foreground'}>{remaining < 0 ? `Over by ${formatCents(-remaining)}` : `${formatCents(remaining)} remaining`}</span></li>
-            })}
-          </ul>}
-        </Card>
-
-        <Card className="p-4 sm:p-5">
-          <div className="mb-2 flex items-center gap-2"><CircleDollarSign className="size-4 text-primary" /><div><h2 className="font-semibold">Spending by bucket</h2><p className="text-xs text-muted-foreground">Recorded expenses grouped by their envelope.</p></div></div>
-          {pieRows.length ? <div className="grid min-h-64 items-center gap-2 sm:grid-cols-[1fr_1fr]">
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%"><PieChart>
-                <Pie data={pieRows} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92} paddingAngle={3}>
-                  {pieRows.map((row, index) => <Cell key={row.name} fill={CHART_COLORS[index % CHART_COLORS.length]} />)}
-                </Pie>
-                <Tooltip formatter={moneyTooltip} contentStyle={{ background: 'var(--color-surface)', border: '1px solid var(--color-line)', borderRadius: 12 }} />
-              </PieChart></ResponsiveContainer>
-            </div>
-            <ul className="space-y-2 text-sm">
-              {summary.spendingByBucket.slice(0, 7).map((row, index) => <li key={row.id} className="flex items-center justify-between gap-3"><span className="flex min-w-0 items-center gap-2"><i className="size-2.5 shrink-0 rounded-full" style={{ background: CHART_COLORS[index % CHART_COLORS.length] }} /><span className="truncate">{row.name}</span></span><strong className="shrink-0 tabular-nums">{formatCents(row.amount)}</strong></li>)}
-            </ul>
-          </div> : <EmptyChart>No spending recorded in this period.</EmptyChart>}
-        </Card>
-      </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card className="p-4 sm:p-5">
@@ -157,8 +231,8 @@ export default function Analytics() {
       </div>
 
       <Card className="p-4 sm:p-5">
-        <div className="mb-2 flex items-center gap-2"><BarChart3 className="size-4 text-primary" /><div><h2 className="font-semibold">Money flow</h2><p className="text-xs text-muted-foreground">Income → available money → groups → buckets → spending and unspent balances.</p></div></div>
-        <MoneyFlowSankey events={events} buckets={buckets} groups={groups} startDate={summary.startDate} endDate={summary.endDate} />
+        <div className="mb-2 flex items-center gap-2"><BarChart3 className="size-4 text-primary" /><div><h2 className="font-semibold">Money flow</h2><p className="text-xs text-muted-foreground">Review the full plan, or choose a group to inspect its buckets and top payees.</p></div></div>
+        <SankeyChart events={events} buckets={buckets} groups={groups} startDate={summary.startDate} endDate={summary.endDate} />
       </Card>
     </div>
   )

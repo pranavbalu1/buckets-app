@@ -39,7 +39,7 @@ const eventIcons: Record<EventType, LucideIcon> = {
 
 const eventColors: Record<EventType, string> = {
   income: 'bg-good/10 text-good',
-  expense: 'bg-amber-500/10 text-amber-300',
+  expense: 'bg-expense-soft text-expense',
   allocation: 'bg-accent-soft text-accent',
   bucket_move: 'bg-sunken text-muted',
   account_transfer: 'bg-sunken text-muted',
@@ -74,6 +74,7 @@ export default function Transactions() {
     (!q || [
       event.description,
       event.payee ?? '',
+      event.customType ?? '',
       TYPE_LABELS[event.type],
       describeEvent(event, accountName, bucketName),
       (event.amountCents / 100).toFixed(2),
@@ -135,8 +136,8 @@ export default function Transactions() {
         <div className="mt-4 grid gap-3 border-t border-line pt-3 sm:grid-cols-2 xl:grid-cols-6">
           <label className="text-xs text-muted">From date<Input type="date" aria-label="Filter from date" className="mt-1 h-9" value={fromDate} onChange={(event) => setFromDate(event.target.value)} /></label>
           <label className="text-xs text-muted">To date<Input type="date" aria-label="Filter to date" className="mt-1 h-9" value={toDate} onChange={(event) => setToDate(event.target.value)} /></label>
-          <label className="text-xs text-muted">Account<Select aria-label="Filter account" value={accountFilter} onChange={(event) => setAccountFilter(event.target.value)} options={accounts.map((account) => ({ value: account.id, label: account.name }))} placeholder="Any account" className="mt-1 h-9" /></label>
-          <label className="text-xs text-muted">Bucket<Select aria-label="Filter bucket" value={bucketFilter} onChange={(event) => setBucketFilter(event.target.value)} options={buckets.map((bucket) => ({ value: bucket.id, label: bucket.name }))} placeholder="Any bucket" className="mt-1 h-9" /></label>
+          <label className="text-xs text-muted">Account<Select aria-label="Filter account" value={accountFilter} onChange={(event) => setAccountFilter(event.target.value)} options={[{ value: '', label: 'Any account' }, ...accounts.map((account) => ({ value: account.id, label: account.name }))]} className="mt-1 h-9" /></label>
+          <label className="text-xs text-muted">Bucket<Select aria-label="Filter bucket" value={bucketFilter} onChange={(event) => setBucketFilter(event.target.value)} options={[{ value: '', label: 'Any bucket' }, ...buckets.map((bucket) => ({ value: bucket.id, label: bucket.name }))]} className="mt-1 h-9" /></label>
           <label className="text-xs text-muted">Min amount<Input inputMode="decimal" aria-label="Filter minimum amount" className="mt-1 h-9" placeholder="0.00" value={minAmount} onChange={(event) => setMinAmount(event.target.value)} /></label>
           <label className="text-xs text-muted">Max amount<Input inputMode="decimal" aria-label="Filter maximum amount" className="mt-1 h-9" placeholder="0.00" value={maxAmount} onChange={(event) => setMaxAmount(event.target.value)} /></label>
         </div>
@@ -180,6 +181,7 @@ export default function Transactions() {
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                       <span className="truncate text-sm font-semibold">{event.description || TYPE_LABELS[event.type]}</span>
                       <span className="rounded-md bg-sunken px-1.5 py-0.5 text-[10px] font-medium text-muted">{TYPE_LABELS[event.type]}</span>
+                      {event.customType && <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">{event.customType}</span>}
                     </div>
                     <p className="mt-0.5 truncate text-xs text-muted">{describeEvent(event, accountName, bucketName)}</p>
                   </div>

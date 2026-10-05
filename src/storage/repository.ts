@@ -11,6 +11,7 @@ export interface LedgerData {
 }
 
 export interface BucketInput {
+  id?: string
   name: string
   kind: BucketKind
   groupId: string | null
@@ -30,10 +31,11 @@ export interface LedgerRepository {
   exportAll(): Promise<AppBackup>
   importAll(backup: AppBackup): Promise<void>
 
-  createAccount(input: { name: string; type: AccountType; sortOrder: number }): Promise<Account>
+  createAccount(input: { id?: string; name: string; type: AccountType; sortOrder: number }): Promise<Account>
   updateAccount(id: string, patch: Partial<Pick<Account, 'name' | 'type' | 'sortOrder' | 'archived'>>): Promise<Account>
+  deleteAccount(id: string): Promise<void>
 
-  createGroup(input: { name: string; sortOrder: number; color: string | null }): Promise<BucketGroup>
+  createGroup(input: { id?: string; name: string; sortOrder: number; color: string | null }): Promise<BucketGroup>
   updateGroup(id: string, patch: { name?: string; color?: string | null; sortOrder?: number }): Promise<BucketGroup>
   deleteGroup(id: string): Promise<void>
 

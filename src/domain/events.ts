@@ -11,6 +11,7 @@ export function makeEvent(
     bucketId: null,
     toBucketId: null,
     direction: null,
+    customType: null,
     description: '',
     payee: null,
     notes: null,

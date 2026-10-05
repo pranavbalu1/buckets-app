@@ -21,6 +21,8 @@ export interface LedgerEvent {
   toBucketId: string | null
   /** Adjustments only */
   direction: 'in' | 'out' | null
+  /** Optional user-defined label; the built-in type still determines ledger behavior. */
+  customType?: string | null
   description: string
   payee: string | null
   notes: string | null

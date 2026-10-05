@@ -1,13 +1,30 @@
-import { useEffect, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import type { Dispatch, SetStateAction } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { useQuery } from '@tanstack/react-query'
-import { supabase } from './lib/supabase'
+import {
+  Activity,
+  ArrowLeftRight,
+  BarChart3,
+  CircleDollarSign,
+  LayoutDashboard,
+  Moon,
+  Plus,
+  Settings2,
+  Sun,
+  Wallet,
+  WalletCards,
+} from 'lucide-react'
+import { Navigate, Outlet, Route, Routes, useLocation, useNavigate } from 'react-router'
+import { hasSupabaseConfig, supabase } from './lib/supabase'
 import { useLedger } from './storage/store'
 import type { AddKind, Tab } from './nav'
 import Modal from './components/Modal'
 import Sidebar from './components/Sidebar'
 import { Button } from './components/ui/button'
 import { Card } from './components/ui/card'
+import { CommandMenu } from './components/ui/command-menu'
+import type { CommandItem } from './components/ui/command-menu'
 import Login from './features/Login'
 import Dashboard from './features/Dashboard'
 import Budget from './features/Budget'
@@ -16,8 +33,22 @@ import Accounts from './features/Accounts'
 import QuickAdd from './features/QuickAdd'
 import Analytics from './features/Analytics'
 import Settings from './features/Settings'
+import DevTools from './features/DevTools'
 import { queryClient } from './lib/queryClient'
+import { applyTheme, readThemePreference, saveThemePreference } from './lib/theme'
+import type { ThemePreference } from './lib/theme'
 import { supabaseRepository } from './storage/supabaseRepository'
+
+const tabPaths: Record<Tab, string> = {
+  Dashboard: '/dashboard',
+  Budget: '/budget',
+  Transactions: '/transactions',
+  Analytics: '/analytics',
+  Accounts: '/accounts',
+  Settings: '/settings',
+}
+
+const pathTabs = Object.fromEntries(Object.entries(tabPaths).map(([tab, path]) => [path, tab])) as Record<string, Tab>
 
 const pageDescriptions: Partial<Record<Tab, string>> = {
   Budget: 'Give every dollar a job and keep your goals in view.',
@@ -27,19 +58,43 @@ const pageDescriptions: Partial<Record<Tab, string>> = {
   Settings: 'Manage your data, recurring plans, paychecks, and account checks.',
 }
 
+interface WorkspaceActions {
+  navigateTab: (tab: Tab) => void
+  setAddKind: Dispatch<SetStateAction<AddKind | null>>
+  userId: string
+  theme: ThemePreference
+  setTheme: (theme: ThemePreference) => void
+}
+
+const WorkspaceContext = createContext<WorkspaceActions | null>(null)
+
+function useWorkspaceActions() {
+  const actions = useContext(WorkspaceContext)
+  if (!actions) throw new Error('Workspace route rendered outside the workspace layout')
+  return actions
+}
+
 export default function App() {
   const [session, setSession] = useState<Session | null>(null)
   const [authReady, setAuthReady] = useState(false)
-  const [tab, setTab] = useState<Tab>('Dashboard')
-  const [addKind, setAddKind] = useState<AddKind | null>(null)
-  const { status, error, reset, clearError } = useLedger()
+  const [theme, setTheme] = useState(readThemePreference)
+  const { status, error, reset } = useLedger()
 
   useEffect(() => {
+    applyTheme(theme)
+    saveThemePreference(theme)
+  }, [theme])
+
+  useEffect(() => {
+    if (!hasSupabaseConfig) return
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session)
       setAuthReady(true)
     })
-    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => setSession(nextSession))
+    const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession)
+      setAuthReady(true)
+    })
     return () => data.subscription.unsubscribe()
   }, [])
 
@@ -68,89 +123,204 @@ export default function App() {
     }
   }, [authReady, userId, ledgerQuery.isPending, ledgerQuery.error, ledgerQuery.data, reset])
 
-  // Press "n" anywhere outside a text field to add a transaction.
+  if (!authReady && hasSupabaseConfig) return (
+    <main className="grid min-h-screen place-items-center bg-canvas p-4">
+      <Card className="flex w-full max-w-sm items-center gap-3 p-5 text-sm text-muted" role="status" aria-live="polite">
+        <span className="size-4 animate-spin rounded-full border-2 border-accent/25 border-t-accent" aria-hidden />
+        Restoring your session...
+      </Card>
+    </main>
+  )
+
+  return (
+    <Routes>
+      {/* Diagnostics have no workflow link; in production the route is disabled. */}
+      <Route
+        path="/devtools"
+        element={import.meta.env.DEV
+          ? <DevTools userId={session?.user.id} email={session?.user.email} />
+          : <Navigate to={session ? '/dashboard' : '/'} replace />}
+      />
+      {session ? (
+        <Route element={
+          <WorkspaceLayout
+            session={session}
+            theme={theme}
+            onThemeChange={setTheme}
+            status={status}
+            error={error}
+            onClearError={() => useLedger.getState().clearError()}
+            onRetry={() => void ledgerQuery.refetch()}
+          />
+        }>
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="dashboard" element={<DashboardRoute />} />
+          <Route path="budget" element={<Budget />} />
+          <Route path="transactions" element={<Transactions />} />
+          <Route path="accounts" element={<Accounts />} />
+          <Route path="analytics" element={<Analytics />} />
+          <Route path="settings" element={<SettingsRoute />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Route>
+      ) : (
+        <Route path="*" element={<Login />} />
+      )}
+    </Routes>
+  )
+}
+
+function WorkspaceLayout({
+  session,
+  theme,
+  onThemeChange,
+  status,
+  error,
+  onClearError,
+  onRetry,
+}: {
+  session: Session
+  theme: ThemePreference
+  onThemeChange: (theme: ThemePreference) => void
+  status: string
+  error: string | null
+  onClearError: () => void
+  onRetry: () => void
+}) {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const [addKind, setAddKind] = useState<AddKind | null>(null)
+  const [commandOpen, setCommandOpen] = useState(false)
+  const tab = pathTabs[location.pathname.replace(/\/$/, '')] ?? 'Dashboard'
+  const navigateTab = useCallback((nextTab: Tab) => {
+    navigate(tabPaths[nextTab])
+    window.scrollTo({ top: 0, behavior: 'auto' })
+  }, [navigate])
+  const actions = useMemo<WorkspaceActions>(() => ({
+    navigateTab,
+    setAddKind,
+    userId: session.user.id,
+    theme,
+    setTheme: onThemeChange,
+  }), [navigateTab, session.user.id, theme, onThemeChange])
+
+  const commandItems = useMemo<CommandItem[]>(() => [
+    ...Object.keys(tabPaths).map((name) => ({
+      id: `navigate-${name.toLowerCase()}`,
+      title: `Go to ${name}`,
+      subtitle: pageDescriptions[name as Tab] ?? 'Your money overview and recent activity',
+      category: 'Navigation',
+      icon: name === 'Dashboard' ? <LayoutDashboard className="size-4" />
+        : name === 'Budget' ? <Wallet className="size-4" />
+          : name === 'Transactions' ? <ArrowLeftRight className="size-4" />
+            : name === 'Analytics' ? <BarChart3 className="size-4" />
+              : name === 'Accounts' ? <WalletCards className="size-4" />
+                : <Settings2 className="size-4" />,
+      shortcut: name === 'Dashboard' ? 'G D' : name === 'Budget' ? 'G B' : undefined,
+      onSelect: () => navigateTab(name as Tab),
+    })),
+    { id: 'new-expense', title: 'Add an expense', subtitle: 'Record spending and choose a bucket', category: 'Quick actions', icon: <Plus className="size-4" />, shortcut: 'N', onSelect: () => setAddKind('expense') },
+    { id: 'new-income', title: 'Add income', subtitle: 'Record money received', category: 'Quick actions', icon: <CircleDollarSign className="size-4" />, onSelect: () => setAddKind('income') },
+    { id: 'new-deposit', title: 'Record a deposit', subtitle: 'Add money to one of your accounts', category: 'Quick actions', icon: <CircleDollarSign className="size-4" />, onSelect: () => setAddKind('deposit') },
+    { id: 'move-money', title: 'Move money between buckets', subtitle: 'Rebalance your plan', category: 'Quick actions', icon: <ArrowLeftRight className="size-4" />, onSelect: () => setAddKind('move') },
+    { id: 'transfer-money', title: 'Transfer between accounts', subtitle: 'Move money between your accounts', category: 'Quick actions', icon: <ArrowLeftRight className="size-4" />, onSelect: () => setAddKind('transfer') },
+    { id: 'activity', title: 'Review recent activity', subtitle: 'Open your transaction history', category: 'Quick actions', icon: <Activity className="size-4" />, onSelect: () => navigateTab('Transactions') },
+    {
+      id: 'toggle-theme',
+      title: theme === 'dark' ? 'Switch to light appearance' : 'Switch to dark appearance',
+      subtitle: 'Change the app color scheme',
+      category: 'Preferences',
+      icon: theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />,
+      onSelect: () => onThemeChange(theme === 'dark' ? 'light' : 'dark'),
+    },
+  ], [navigateTab, theme, onThemeChange])
+
+  // The command menu owns Cmd/Ctrl+K; keep the single-key add shortcut out of editable fields.
   useEffect(() => {
-    if (!userId) return
     function onKey(event: KeyboardEvent) {
-      const element = event.target as HTMLElement
-      const typing = ['INPUT', 'SELECT', 'TEXTAREA'].includes(element.tagName)
-      if (event.key === 'n' && !typing && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      if (!session.user.id || event.defaultPrevented) return
+      const target = event.target
+      const typing = target instanceof HTMLElement && (
+        ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName) || target.isContentEditable
+      )
+      if (event.key.toLowerCase() === 'n' && !typing && !event.metaKey && !event.ctrlKey && !event.altKey) {
         setAddKind((kind) => kind ?? 'expense')
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [userId])
-
-  if (!authReady) return null
-  if (!session) return <Login />
+  }, [session.user.id])
 
   return (
-    <div className="min-h-screen bg-canvas md:flex">
-      <Sidebar
-        tab={tab}
-        onNavigate={setTab}
-        onAdd={() => setAddKind('expense')}
-        onLogout={() => supabase.auth.signOut()}
-      />
+    <WorkspaceContext.Provider value={actions}>
+      <div className="min-h-screen bg-canvas md:flex">
+        <Sidebar
+          tab={tab}
+          onNavigate={navigateTab}
+          onAdd={() => setAddKind('expense')}
+          onOpenCommandMenu={() => setCommandOpen(true)}
+          onLogout={() => void supabase.auth.signOut()}
+        />
 
-      <main className="min-w-0 flex-1 px-4 pb-8 pt-5 md:px-8 md:py-8 xl:px-10">
-        <div className="mx-auto max-w-[1440px]">
-          {tab !== 'Dashboard' && (
-            <div className="mb-6 flex flex-wrap items-end justify-between gap-4 md:mb-8">
-              <div>
-                <div className="mb-2 flex items-center gap-2 text-xs font-semibold tracking-[0.13em] text-accent uppercase">
-                  <span className="size-1.5 rounded-full bg-accent" /> Workspace
+        <main className="min-w-0 flex-1 px-4 pb-8 pt-5 md:px-8 md:py-8 xl:px-10">
+          <div className="mx-auto max-w-[1440px]">
+            {tab !== 'Dashboard' && (
+              <div className={`mb-6 flex flex-wrap items-end justify-between gap-4 md:mb-8 ${tab === 'Budget' ? 'mb-4 md:mb-5' : ''}`}>
+                <div>
+                  <div className="mb-2 flex items-center gap-2 text-xs font-semibold tracking-[0.13em] text-accent uppercase">
+                    <span className="size-1.5 rounded-full bg-accent" /> Workspace
+                  </div>
+                  <h1 className={`font-semibold tracking-tight ${tab === 'Budget' ? 'text-2xl md:text-[1.75rem]' : 'text-3xl md:text-[2rem]'}`}>{tab}</h1>
+                  <p className="mt-1.5 text-sm text-muted">{pageDescriptions[tab]}</p>
                 </div>
-                <h1 className="text-3xl font-semibold tracking-tight md:text-[2rem]">{tab}</h1>
-                <p className="mt-1.5 text-sm text-muted">{pageDescriptions[tab]}</p>
+                <Button variant="primary" className="hidden sm:inline-flex" onClick={() => setAddKind('expense')}>
+                  + Add transaction
+                </Button>
               </div>
-              <Button variant="primary" className="hidden sm:inline-flex" onClick={() => setAddKind('expense')}>
-                + Add transaction
-              </Button>
-            </div>
-          )}
+            )}
 
-          {error && (
-            <div role="alert" className="mb-5 flex items-center justify-between gap-4 rounded-xl border border-bad/30 bg-bad-soft p-3.5 text-sm text-bad">
-              <span>{error}</span>
-              <button className="shrink-0 underline underline-offset-2" onClick={clearError}>Dismiss</button>
-            </div>
-          )}
-
-          {status === 'loading' && (
-            <Card className="flex min-h-48 items-center justify-center gap-3 p-8 text-sm text-muted">
-              <span className="size-4 animate-spin rounded-full border-2 border-accent/25 border-t-accent" aria-hidden />
-              Loading your money plan…
-            </Card>
-          )}
-          {status === 'error' && (
-            <Card className="flex flex-col items-start gap-3 border-destructive/25 p-5" role="alert">
-              <div>
-                <h2 className="font-semibold">Could not connect to your Supabase project</h2>
-                <p className="mt-1 text-sm text-muted-foreground">{error || 'Check your connection and Supabase project status. A free project may need to be resumed from the Supabase dashboard.'}</p>
+            {error && (
+              <div role="alert" className="mb-5 flex items-center justify-between gap-4 rounded-xl border border-bad/30 bg-bad-soft p-3.5 text-sm text-bad">
+                <span>{error}</span>
+                <button className="shrink-0 underline underline-offset-2" onClick={onClearError}>Dismiss</button>
               </div>
-              <Button variant="primary" onClick={() => void ledgerQuery.refetch()}>Try again</Button>
-            </Card>
-          )}
-          {status === 'ready' && (
-            <>
-              {tab === 'Dashboard' && <Dashboard onAdd={setAddKind} onNavigate={setTab} />}
-              {tab === 'Budget' && <Budget />}
-              {tab === 'Transactions' && <Transactions />}
-              {tab === 'Accounts' && <Accounts />}
-              {tab === 'Analytics' && <Analytics />}
-              {tab === 'Settings' && <Settings userId={session.user.id} />}
-            </>
-          )}
-        </div>
-      </main>
+            )}
 
-      {addKind && (
-        <Modal title="Add transaction" onClose={() => setAddKind(null)}>
-          <QuickAdd key={addKind} initialKind={addKind} onDone={() => setAddKind(null)} />
-        </Modal>
-      )}
-    </div>
+            {status === 'loading' && (
+              <Card className="flex min-h-48 items-center justify-center gap-3 p-8 text-sm text-muted">
+                <span className="size-4 animate-spin rounded-full border-2 border-accent/25 border-t-accent" aria-hidden />
+                Loading your money plan...
+              </Card>
+            )}
+            {status === 'error' && (
+              <Card className="flex flex-col items-start gap-3 border-destructive/25 p-5" role="alert">
+                <div>
+                  <h2 className="font-semibold">Could not connect to your Supabase project</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">{error || 'Check your connection and Supabase project status. A free project may need to be resumed from the Supabase dashboard.'}</p>
+                </div>
+                <Button variant="primary" onClick={onRetry}>Try again</Button>
+              </Card>
+            )}
+            {status === 'ready' && <Outlet />}
+          </div>
+        </main>
+
+        {addKind && (
+          <Modal title="Add transaction" onClose={() => setAddKind(null)}>
+            <QuickAdd key={addKind} initialKind={addKind} onDone={() => setAddKind(null)} />
+          </Modal>
+        )}
+        <CommandMenu isOpen={commandOpen} onOpen={() => setCommandOpen(true)} onClose={() => setCommandOpen(false)} items={commandItems} />
+      </div>
+    </WorkspaceContext.Provider>
   )
+}
+
+function DashboardRoute() {
+  const { navigateTab, setAddKind } = useWorkspaceActions()
+  return <Dashboard onAdd={setAddKind} onNavigate={navigateTab} />
+}
+
+function SettingsRoute() {
+  const { userId, theme, setTheme } = useWorkspaceActions()
+  return <Settings userId={userId} theme={theme} onThemeChange={setTheme} />
 }

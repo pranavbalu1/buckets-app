@@ -15,6 +15,7 @@ export interface CommandItem {
 export interface CommandMenuProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpen?: () => void;
   items: CommandItem[];
   placeholder?: string;
 }
@@ -22,6 +23,7 @@ export interface CommandMenuProps {
 export function CommandMenu({
   isOpen,
   onClose,
+  onOpen,
   items,
   placeholder = 'Type a command or search...',
 }: CommandMenuProps) {
@@ -56,9 +58,10 @@ export function CommandMenu({
   React.useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Toggle menu on Cmd+K or Ctrl+K
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         if (isOpen) onClose();
+        else onOpen?.();
         return;
       }
 
@@ -87,7 +90,7 @@ export function CommandMenu({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, filteredItems, selectedIndex, onClose]);
+  }, [isOpen, filteredItems, selectedIndex, onClose, onOpen]);
 
   // Group filtered items by category
   const groupedItems = React.useMemo(() => {
@@ -105,12 +108,12 @@ export function CommandMenu({
   let globalIndex = 0;
 
   return (
-    <div className="fixed inset-0 z-50 bg-background/80 backdrop-blur-xs flex items-start justify-center pt-16 sm:pt-24 p-4 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex animate-in items-start justify-center bg-background/80 p-4 pt-16 backdrop-blur-xs duration-150 sm:pt-24">
       {/* Backdrop */}
       <div className="fixed inset-0" onClick={onClose} />
 
       {/* Modal Box */}
-      <div className="relative w-full max-w-xl rounded-3xl bg-card border border-border/80 shadow-2xl overflow-hidden z-10 flex flex-col max-h-[520px]">
+      <div role="dialog" aria-modal="true" aria-label="Search pages and actions" className="relative z-10 flex max-h-[min(520px,calc(100vh-2rem))] w-full max-w-xl flex-col overflow-hidden rounded-3xl border border-border/80 bg-card shadow-2xl">
         {/* Search Header Input */}
         <div className="flex items-center gap-3 px-4 py-3.5 border-b border-border/60">
           <Search className="size-4 shrink-0 text-muted-foreground" />
@@ -123,6 +126,9 @@ export function CommandMenu({
               setSelectedIndex(0);
             }}
             placeholder={placeholder}
+            aria-label="Search commands"
+            autoComplete="off"
+            spellCheck={false}
             className="w-full bg-transparent text-sm font-medium text-foreground placeholder:text-muted-foreground outline-none"
           />
           <kbd className="hidden sm:inline-flex items-center gap-1 text-[10px] font-mono bg-sunken/70 text-muted-foreground px-2 py-0.5 rounded-md border border-border/60">

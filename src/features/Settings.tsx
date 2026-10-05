@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ArchiveRestore, CalendarClock, Check, CircleDollarSign, Download, FileUp, Plus, WalletCards } from 'lucide-react'
+import { ArchiveRestore, CalendarClock, Check, CircleDollarSign, Download, FileUp, Palette, Plus, WalletCards } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Card } from '../components/ui/card'
 import { FormField } from '../components/ui/form-field'
@@ -17,6 +17,7 @@ import { supabase } from '../lib/supabase'
 import { useLedger } from '../storage/store'
 import { supabaseRepository } from '../storage/supabaseRepository'
 import { downloadBackup, parseBackup } from '../storage/backup'
+import type { ThemePreference } from '../lib/theme'
 
 type PlanType = 'income' | 'expense' | 'account_transfer' | 'bucket_move'
 type Frequency = 'weekly' | 'biweekly' | 'monthly' | 'yearly'
@@ -50,9 +51,16 @@ function readBalance(text: string): number | null {
   return negative ? -cents : positive ? cents : cents
 }
 
-export default function Settings({ userId }: { userId: string }) {
+export default function Settings({ userId, theme, onThemeChange }: {
+  userId: string
+  theme: ThemePreference
+  onThemeChange: (theme: ThemePreference) => void
+}) {
   const ledger = useLedger()
-  const [lastExport, setLastExport] = useState(() => localStorage.getItem(LAST_EXPORT_KEY))
+  const [lastExport, setLastExport] = useState(() => {
+    try { return localStorage.getItem(LAST_EXPORT_KEY) } catch { return null }
+  })
+  const [exportIsOld, setExportIsOld] = useState(true)
   const [backupBusy, setBackupBusy] = useState(false)
   const [backupMessage, setBackupMessage] = useState('')
   const [error, setError] = useState('')
@@ -93,7 +101,7 @@ export default function Settings({ userId }: { userId: string }) {
       fail(plans.error); fail(templates.error); fail(reconciliations.error)
       return {
         plans: plans.data as PlanRow[],
-        templates: templates.data.map((row) => ({ ...row, allocations: Array.isArray(row.allocations) ? row.allocations as Allocation[] : [] })) as TemplateRow[],
+        templates: (templates.data ?? []).map((row) => ({ ...row, allocations: Array.isArray(row.allocations) ? row.allocations as Allocation[] : [] })) as TemplateRow[],
         reconciliations: reconciliations.data as ReconciliationRow[],
       }
     },
@@ -103,7 +111,13 @@ export default function Settings({ userId }: { userId: string }) {
   const activeBuckets = ledger.buckets.filter((bucket) => !bucket.archived)
   const planning = planningQuery.data
   const lastExportDate = lastExport ? new Date(lastExport) : null
-  const exportIsOld = !lastExportDate || !Number.isFinite(lastExportDate.getTime()) || (Date.now() - lastExportDate.getTime()) > 30 * 24 * 60 * 60 * 1000
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      const timestamp = lastExport ? Date.parse(lastExport) : NaN
+      setExportIsOld(!Number.isFinite(timestamp) || Date.now() - timestamp > 30 * 24 * 60 * 60 * 1000)
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [lastExport])
   const selectedAccountBalance = useMemo(() => {
     if (!reconcileAccount || !reconcileDate) return 0
     return computeBalances(ledger.events, reconcileDate).accounts[reconcileAccount] ?? 0
@@ -121,7 +135,7 @@ export default function Settings({ userId }: { userId: string }) {
       const backup = await supabaseRepository.exportAll()
       downloadBackup(backup)
       const timestamp = new Date().toISOString()
-      localStorage.setItem(LAST_EXPORT_KEY, timestamp)
+      try { localStorage.setItem(LAST_EXPORT_KEY, timestamp) } catch { /* The download still succeeded. */ }
       setLastExport(timestamp)
       setBackupMessage('Backup downloaded. Keep the JSON file somewhere private and safe.')
     } catch (cause) {
@@ -151,18 +165,38 @@ export default function Settings({ userId }: { userId: string }) {
     const cents = parseDollars(planAmount)
     if (!planName.trim() || cents === null || cents <= 0) { setError('Enter a plan name and a positive amount.'); return }
     if (planEnd && planEnd < planStart) { setError('The end date must be on or after the start date.'); return }
+    if ((planType === 'income' || planType === 'expense' || planType === 'account_transfer') && !planAccount) {
+      setError('Choose the account for this plan.'); return
+    }
+    if ((planType === 'expense' || planType === 'bucket_move') && !planBucket) {
+      setError('Choose the bucket for this plan.'); return
+    }
+    if (planType === 'account_transfer' && (!planToAccount || planToAccount === planAccount)) {
+      setError('Choose two different accounts for this transfer.'); return
+    }
+    if (planType === 'bucket_move' && (!planToBucket || planToBucket === planBucket)) {
+      setError('Choose two different buckets for this move.'); return
+    }
     const common = { name: planName.trim(), event_type: planType, amount_cents: cents, frequency, start_date: planStart, next_run: planStart, end_date: planEnd || null }
-    const shaped = planType === 'income'
-      ? { ...common, account_id: planAccount || null }
-      : planType === 'expense'
-        ? { ...common, account_id: planAccount || null, bucket_id: planBucket || null }
-        : planType === 'account_transfer'
-          ? { ...common, account_id: planAccount || null, to_account_id: planToAccount || null }
-          : { ...common, bucket_id: planBucket || null, to_bucket_id: planToBucket || null }
-    const { error: insertError } = await supabase.from('recurring_plans').insert(shaped)
-    if (insertError) { setError(insertError.message); return }
-    setPlanName(''); setPlanAmount(''); setRecurringMessage('Recurring plan saved. Its next occurrence will wait for your confirmation.')
-    await refreshPlanning()
+    const shaped = {
+      ...common,
+      account_id: null as string | null,
+      to_account_id: null as string | null,
+      bucket_id: null as string | null,
+      to_bucket_id: null as string | null,
+    }
+    if (planType === 'income' || planType === 'expense' || planType === 'account_transfer') shaped.account_id = planAccount || null
+    if (planType === 'expense' || planType === 'bucket_move') shaped.bucket_id = planBucket || null
+    if (planType === 'account_transfer') shaped.to_account_id = planToAccount || null
+    if (planType === 'bucket_move') shaped.to_bucket_id = planToBucket || null
+    try {
+      const { error: insertError } = await supabase.from('recurring_plans').insert(shaped)
+      if (insertError) throw new Error(insertError.message)
+      setPlanName(''); setPlanAmount(''); setRecurringMessage('Recurring plan saved. Its next occurrence will wait for your confirmation.')
+      await refreshPlanning()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not save this recurring plan.')
+    }
   }
 
   async function completePlan(plan: PlanRow, confirm: boolean) {
@@ -189,6 +223,9 @@ export default function Settings({ userId }: { userId: string }) {
 
   async function saveTemplate(event: React.FormEvent) {
     event.preventDefault(); setTemplateMessage(''); setError('')
+    if (Object.values(allocationInputs).some((text) => text.trim() !== '' && (parseDollars(text) === null || parseDollars(text) === 0))) {
+      setError('Enter each bucket allocation as a positive dollar amount, or leave it blank.'); return
+    }
     const allocations = Object.entries(allocationInputs).flatMap(([bucketId, text]) => {
       const cents = parseDollars(text)
       return cents && cents > 0 ? [{ bucketId, cents }] : []
@@ -259,13 +296,29 @@ export default function Settings({ userId }: { userId: string }) {
     <div className="space-y-5 md:space-y-6">
       {error && <p role="alert" className="rounded-xl border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive">{error}</p>}
       {planningQuery.error && <p role="alert" className="rounded-xl border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive">Could not load planning data: {(planningQuery.error as Error).message}</p>}
+      {planningQuery.isLoading && <p className="text-sm text-muted-foreground" role="status">Loading your plans, templates, and reconciliation history…</p>}
+
+      <Card className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="flex items-start gap-3">
+          <span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary"><Palette className="size-4" /></span>
+          <div><h2 className="font-semibold">Appearance</h2><p className="mt-1 text-sm text-muted-foreground">Choose a theme for this browser. Your preference is saved on this device.</p></div>
+        </div>
+        <div className="w-full sm:max-w-56">
+          <FormField label="Color theme">
+            <Select value={theme} onChange={(event) => onThemeChange(event.target.value as ThemePreference)} options={[
+              { value: 'dark', label: 'Dark - library palette' },
+              { value: 'light', label: 'Light - accessible contrast' },
+            ]} />
+          </FormField>
+        </div>
+      </Card>
 
       <Card className="p-5 sm:p-6">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-3">
             <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><ArchiveRestore className="size-5" /></span>
             <div><h2 className="font-semibold">Your data and backups</h2><p className="mt-1 max-w-2xl text-sm text-muted-foreground">Export every account, bucket, transaction, recurring plan, paycheck template, and reconciliation into one portable JSON file.</p>
-              <p className={`mt-2 text-xs ${exportIsOld ? 'font-semibold text-amber-300' : 'text-muted-foreground'}`}>
+              <p className={`mt-2 text-xs ${exportIsOld ? 'font-semibold text-warning' : 'text-muted-foreground'}`}>
                 {lastExportDate ? `Last exported on this device ${lastExportDate.toLocaleDateString()}.` : 'No backup has been exported on this device yet.'}
                 {exportIsOld && ' Export a backup now; the reminder appears every 30 days.'}
               </p>
@@ -306,10 +359,10 @@ export default function Settings({ userId }: { userId: string }) {
             {planning?.plans.map((plan) => {
               const isPending = plan.active && plan.next_run <= today
               return <div key={plan.id} className="rounded-xl border border-border/70 p-3">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0"><div className="flex items-center gap-2"><strong className="truncate text-sm">{plan.name}</strong>{isPending && <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">Pending</span>}{!plan.active && <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">Paused</span>}</div>
+                <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                  <div className="min-w-0 flex-[1_1_15rem]"><div className="flex min-w-0 flex-wrap items-center gap-2"><strong className="min-w-0 truncate text-sm">{plan.name}</strong>{isPending && <span className="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">Pending</span>}{!plan.active && <span className="shrink-0 rounded-full bg-sunken px-2 py-0.5 text-[10px] font-medium text-muted">Paused</span>}</div>
                     <p className="mt-1 text-xs text-muted-foreground">{formatCents(plan.amount_cents)} · {plan.frequency} · next {plan.next_run}</p></div>
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex shrink-0 flex-wrap gap-1.5">
                     {isPending && <><Button size="sm" variant="primary" onClick={() => void completePlan(plan, true)}><Check className="size-3.5" /> Confirm</Button><Button size="sm" onClick={() => void completePlan(plan, false)}>Skip</Button></>}
                     {!isPending && <Button size="sm" onClick={() => void togglePlan(plan)}>{plan.active ? 'Pause' : 'Resume'}</Button>}
                     <Button size="sm" variant="danger" onClick={() => void removePlan(plan)}>Delete</Button>
