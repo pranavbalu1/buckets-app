@@ -216,6 +216,9 @@ export const useLedger = create<LedgerState>((set, get) => {
           accounts: state.accounts.filter((item) => item.id !== id),
           events: state.events.filter((event) => event.accountId !== id && event.toAccountId !== id),
         }))
+      }).then(async (deleted) => {
+        if (deleted) await queryClient.invalidateQueries({ queryKey: ['planning-settings'] })
+        return deleted
       })
     },
 

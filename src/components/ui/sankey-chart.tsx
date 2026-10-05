@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { MouseEvent as ReactMouseEvent } from 'react'
 import { sankey, sankeyLinkHorizontal } from 'd3-sankey'
 import type { SankeyExtraProperties, SankeyLink, SankeyNode } from 'd3-sankey'
 import { effectiveDate, computeBalances } from '../../domain/balances'
@@ -25,10 +26,35 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
   startDate: string
   endDate: string
 }) {
+  const containerRef = useRef<HTMLDivElement>(null)
+  const cursorFrame = useRef<number | null>(null)
+  const pendingCursor = useRef<{ x: number; y: number } | null>(null)
   const [hovered, setHovered] = useState<{ label: string; value: number; color: string } | null>(null)
   const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null)
   const [selectedGroupId, setSelectedGroupId] = useState('all')
   const [showMerchants, setShowMerchants] = useState(false)
+  useEffect(() => () => {
+    if (cursorFrame.current !== null) window.cancelAnimationFrame(cursorFrame.current)
+  }, [])
+
+  function updateCursor(event: ReactMouseEvent<HTMLDivElement>) {
+    const rect = containerRef.current?.getBoundingClientRect()
+    if (!rect) return
+    pendingCursor.current = { x: event.clientX - rect.left, y: event.clientY - rect.top }
+    if (cursorFrame.current !== null) return
+    cursorFrame.current = window.requestAnimationFrame(() => {
+      cursorFrame.current = null
+      if (pendingCursor.current) setCursorPos(pendingCursor.current)
+    })
+  }
+
+  function clearCursor() {
+    if (cursorFrame.current !== null) window.cancelAnimationFrame(cursorFrame.current)
+    cursorFrame.current = null
+    pendingCursor.current = null
+    setHovered(null)
+    setCursorPos(null)
+  }
   const groupOptions = [
     { value: 'all', label: 'All groups · overview' },
     ...groups.map((group) => ({ value: group.id, label: group.name })),
@@ -248,7 +274,7 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
   const { layout, layoutHeight } = graph
 
   return (
-    <div className="relative">
+    <div ref={containerRef} className="relative">
       {hovered && cursorPos && <GraphHoverTooltip
         left={cursorPos.x}
         top={cursorPos.y}
@@ -281,54 +307,51 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
       </div>
       <div
         className="overflow-x-auto"
-      onMouseMove={(event) => {
-        const rect = event.currentTarget.getBoundingClientRect()
-        setCursorPos({ x: event.clientX - rect.left, y: event.clientY - rect.top })
-      }}
-      onMouseLeave={() => { setHovered(null); setCursorPos(null) }}
-    >
-      <svg viewBox={`0 0 960 ${layoutHeight + 42}`} role="img" aria-label="Sankey diagram of income, bucket funding, spending, and unspent money" className="h-auto min-w-[760px] w-full">
-        <g fill="none">
-          {layout.links.map((link, index) => {
-            const typed = link as LayoutLink
-            const source = typed.source as LayoutNode
-            const target = typed.target as LayoutNode
-            return <path key={`${source.id}-${index}`} d={path(typed) ?? ''} stroke={source.color} strokeOpacity={0.3} strokeWidth={Math.max(1, typed.width ?? 1)} className="cursor-pointer transition-[stroke-opacity] hover:stroke-opacity-80" onMouseEnter={() => setHovered({ label: `${source.label} → ${target.label}`, value: typed.value, color: source.color })}>
-              <title>{`${source.label} → ${target.label}: ${formatCents(typed.value)}`}</title>
-            </path>
-          })}
-        </g>
-        <g>
-          {layout.nodes.map((node) => {
-            const typed = node as LayoutNode
-            const x = typed.x0 ?? 0
-            const y = typed.y0 ?? 0
-            const rightSide = x > 700
-            return (
-              <g key={typed.id}>
-                <rect x={x} y={y} width={(typed.x1 ?? x + 14) - x} height={Math.max(1, (typed.y1 ?? y + 1) - y)} fill={typed.color} rx="3" className="cursor-pointer" onMouseEnter={() => setHovered({ label: typed.label, value: typed.value ?? 0, color: typed.color })} />
-                <text x={rightSide ? x - 7 : (typed.x1 ?? x + 14) + 7} y={(typed.y0 ?? 0) + ((typed.y1 ?? 0) - (typed.y0 ?? 0)) / 2} textAnchor={rightSide ? 'end' : 'start'} dominantBaseline="middle" fill="currentColor" fontSize="11">
-                  {typed.label}
-                </text>
-              </g>
-            )
-          })}
-        </g>
-      </svg>
-      <div className="flex flex-wrap items-center justify-between gap-2 px-2 pt-2">
-        <p className="max-w-3xl text-xs leading-5 text-muted">
-          {activeGroupId === 'all'
-            ? 'Overview shows period income and starting balances through groups into bucket spending and closing balances. Choose a group to focus on its buckets.'
-            : showMerchants
-              ? 'Group detail shows the five largest payees; remaining payees are combined. Flows summarize bucket activity and do not trace individual income dollars.'
-              : 'Group detail summarizes each bucket’s spending and closing balance. Flows do not trace individual income dollars.'}
-        </p>
-        {overspentTotal > 0 && (
-          <p className="rounded-full bg-bad-soft px-2.5 py-1 text-xs font-medium text-bad" role="status">
-            Overdrawn buckets <span className="ml-1 tabular-nums">{formatCents(-overspentTotal)}</span>
+        onMouseMove={updateCursor}
+        onMouseLeave={clearCursor}
+      >
+        <svg viewBox={`0 0 960 ${layoutHeight + 42}`} role="img" aria-label="Sankey diagram of income, bucket funding, spending, and unspent money" className="h-auto min-w-[760px] w-full">
+          <g fill="none">
+            {layout.links.map((link, index) => {
+              const typed = link as LayoutLink
+              const source = typed.source as LayoutNode
+              const target = typed.target as LayoutNode
+              return <path key={`${source.id}-${index}`} d={path(typed) ?? ''} stroke={source.color} strokeOpacity={0.3} strokeWidth={Math.max(1, typed.width ?? 1)} className="cursor-pointer transition-[stroke-opacity] hover:stroke-opacity-80" onMouseEnter={() => setHovered({ label: `${source.label} → ${target.label}`, value: typed.value, color: source.color })}>
+                <title>{`${source.label} → ${target.label}: ${formatCents(typed.value)}`}</title>
+              </path>
+            })}
+          </g>
+          <g>
+            {layout.nodes.map((node) => {
+              const typed = node as LayoutNode
+              const x = typed.x0 ?? 0
+              const y = typed.y0 ?? 0
+              const rightSide = x > 700
+              return (
+                <g key={typed.id}>
+                  <rect x={x} y={y} width={(typed.x1 ?? x + 14) - x} height={Math.max(1, (typed.y1 ?? y + 1) - y)} fill={typed.color} rx="3" className="cursor-pointer" onMouseEnter={() => setHovered({ label: typed.label, value: typed.value ?? 0, color: typed.color })} />
+                  <text x={rightSide ? x - 7 : (typed.x1 ?? x + 14) + 7} y={(typed.y0 ?? 0) + ((typed.y1 ?? 0) - (typed.y0 ?? 0)) / 2} textAnchor={rightSide ? 'end' : 'start'} dominantBaseline="middle" fill="currentColor" fontSize="11">
+                    {typed.label}
+                  </text>
+                </g>
+              )
+            })}
+          </g>
+        </svg>
+        <div className="flex flex-wrap items-center justify-between gap-2 px-2 pt-2">
+          <p className="max-w-3xl text-xs leading-5 text-muted">
+            {activeGroupId === 'all'
+              ? 'Overview shows period income and starting balances through groups into bucket spending and closing balances. Choose a group to focus on its buckets.'
+              : showMerchants
+                ? 'Group detail shows the five largest payees; remaining payees are combined. Flows summarize bucket activity and do not trace individual income dollars.'
+                : 'Group detail summarizes each bucket’s spending and closing balance. Flows do not trace individual income dollars.'}
           </p>
-        )}
-      </div>
+          {overspentTotal > 0 && (
+            <p className="rounded-full bg-bad-soft px-2.5 py-1 text-xs font-medium text-bad" role="status">
+              Overdrawn buckets <span className="ml-1 tabular-nums">{formatCents(-overspentTotal)}</span>
+            </p>
+          )}
+        </div>
       </div>
     </div>
   )

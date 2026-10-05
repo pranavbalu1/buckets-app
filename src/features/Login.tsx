@@ -14,10 +14,10 @@ const signInSchema = z.object({
   password: z.string().min(1, 'Enter your password.').max(256, 'Password is too long.'),
 })
 
-export default function Login() {
+export default function Login({ initialError = '' }: { initialError?: string }) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError] = useState(initialError)
   const [busy, setBusy] = useState(false)
 
   async function submit(event: React.FormEvent) {

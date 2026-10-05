@@ -11,6 +11,7 @@ import { buildAnalytics } from '../domain/analytics'
 import type { AnalyticsPeriod } from '../domain/analytics'
 import { todayString } from '../domain/dates'
 import { formatCents } from '../domain/money'
+import { dateSchema, firstIssueMessage } from '../domain/validate'
 import { useLedger } from '../storage/store'
 import SankeyChart from '../components/ui/sankey-chart'
 
@@ -28,6 +29,7 @@ export default function Analytics() {
   const { events, buckets, groups } = useLedger()
   const [period, setPeriod] = useState<AnalyticsPeriod>('month')
   const [selectedDate, setSelectedDate] = useState(todayString())
+  const [dateError, setDateError] = useState('')
   const [budgetGroupId, setBudgetGroupId] = useState('all')
   const [budgetBucketId, setBudgetBucketId] = useState('all')
   const summary = useMemo(() => buildAnalytics(events, buckets, period, selectedDate), [events, buckets, period, selectedDate])
@@ -129,14 +131,24 @@ export default function Analytics() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button size="icon" aria-label="Previous period" onClick={() => changePeriod(-1)}><ArrowLeft className="size-4" /></Button>
-          <input aria-label="Choose analytics date" className="input h-9 w-40" type="date" value={selectedDate} onChange={(event) => setSelectedDate(event.target.value)} />
+          <label className="space-y-1">
+            <span className="sr-only">Choose analytics date</span>
+            <input aria-label="Choose analytics date" aria-invalid={Boolean(dateError)} className="input h-9 w-40" type="date" value={selectedDate} onChange={(event) => {
+              const result = dateSchema.safeParse(event.target.value)
+              if (result.success) { setSelectedDate(result.data); setDateError('') }
+              else setDateError(firstIssueMessage(result.error, 'Choose a valid date.'))
+            }} />
+            {dateError && <span className="block max-w-40 text-xs text-bad" role="alert">{dateError}</span>}
+          </label>
           <Button size="icon" aria-label="Next period" onClick={() => changePeriod(1)}><ArrowRight className="size-4" /></Button>
         </div>
       </Card>
 
       <SegmentedControl
         value={period}
-        onChange={(value) => setPeriod(value as AnalyticsPeriod)}
+        onChange={(value) => {
+          if (value === 'week' || value === 'month' || value === 'year') setPeriod(value)
+        }}
         options={[{ id: 'week', label: 'Week' }, { id: 'month', label: 'Month' }, { id: 'year', label: 'Year' }]}
         className="sm:max-w-md"
       />
@@ -158,7 +170,10 @@ export default function Analytics() {
             legend={spendingLegend}
             timeframeOptions={['Week', 'Month', 'Year']}
             defaultTimeframe={period[0].toUpperCase() + period.slice(1)}
-            onTimeframeChange={(value) => setPeriod(value.toLowerCase() as AnalyticsPeriod)}
+            onTimeframeChange={(value) => {
+              const normalized = value.toLowerCase()
+              if (normalized === 'week' || normalized === 'month' || normalized === 'year') setPeriod(normalized)
+            }}
             className="h-full"
           />
         ) : (

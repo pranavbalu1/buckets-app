@@ -760,6 +760,7 @@ export function AreaLineGraph({
 }: AreaLineGraphProps) {
   const [hoveredIdx, setHoveredIdx] = React.useState<number | null>(null);
   const [cursorPos, setCursorPos] = React.useState<{ x: number; y: number } | null>(null);
+  const gradientId = React.useId().replaceAll(':', '');
 
   const values = data.map((d) => d.value);
   const minVal = Math.min(...(values.length ? values : [0])) * 0.95;
@@ -772,7 +773,7 @@ export function AreaLineGraph({
   const points = React.useMemo(() => {
     if (!data.length) return [];
     return data.map((pt, i) => {
-      const x = (i / (data.length - 1)) * width;
+      const x = data.length > 1 ? (i / (data.length - 1)) * width : width / 2;
       const normalizedY = (pt.value - minVal) / (maxVal - minVal || 1);
       const y = height - paddingY - normalizedY * (height - 2 * paddingY);
       return { x, y, ...pt };
@@ -861,7 +862,7 @@ export function AreaLineGraph({
         >
           <defs>
             <linearGradient
-              id={`area-grad-${title.replace(/\s+/g, '')}`}
+              id={`area-grad-${gradientId}`}
               x1="0"
               y1="0"
               x2="0"
@@ -875,7 +876,7 @@ export function AreaLineGraph({
           {/* Area Fill */}
           <path
             d={areaD}
-            fill={`url(#area-grad-${title.replace(/\s+/g, '')})`}
+            fill={`url(#area-grad-${gradientId})`}
           />
 
           {/* Line Stroke */}

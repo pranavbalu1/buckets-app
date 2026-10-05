@@ -1,5 +1,5 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import type { Dispatch, SetStateAction } from 'react'
+import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import type { Dispatch, ReactNode, SetStateAction } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -20,24 +20,26 @@ import { hasSupabaseConfig, supabase } from './lib/supabase'
 import { useLedger } from './storage/store'
 import type { AddKind, Tab } from './nav'
 import Modal from './components/Modal'
+import RouteErrorBoundary from './components/RouteErrorBoundary'
 import Sidebar from './components/Sidebar'
 import { Button } from './components/ui/button'
 import { Card } from './components/ui/card'
 import { CommandMenu } from './components/ui/command-menu'
 import type { CommandItem } from './components/ui/command-menu'
-import Login from './features/Login'
-import Dashboard from './features/Dashboard'
 import Budget, { BudgetSkeleton } from './features/Budget'
-import Transactions from './features/Transactions'
-import Accounts from './features/Accounts'
-import QuickAdd from './features/QuickAdd'
-import Analytics from './features/Analytics'
-import Settings from './features/Settings'
-import DevTools from './features/DevTools'
 import { queryClient } from './lib/queryClient'
 import { applyTheme, readThemePreference, saveThemePreference } from './lib/theme'
 import type { ThemePreference } from './lib/theme'
 import { supabaseRepository } from './storage/supabaseRepository'
+
+const Login = lazy(() => import('./features/Login'))
+const Dashboard = lazy(() => import('./features/Dashboard'))
+const Transactions = lazy(() => import('./features/Transactions'))
+const Accounts = lazy(() => import('./features/Accounts'))
+const QuickAdd = lazy(() => import('./features/QuickAdd'))
+const Analytics = lazy(() => import('./features/Analytics'))
+const Settings = lazy(() => import('./features/Settings'))
+const DevTools = lazy(() => import('./features/DevTools'))
 
 const tabPaths: Record<Tab, string> = {
   Dashboard: '/dashboard',
@@ -77,6 +79,7 @@ function useWorkspaceActions() {
 export default function App() {
   const [session, setSession] = useState<Session | null>(null)
   const [authReady, setAuthReady] = useState(false)
+  const [authError, setAuthError] = useState('')
   const [theme, setTheme] = useState(readThemePreference)
   const { status, error, reset } = useLedger()
 
@@ -87,15 +90,26 @@ export default function App() {
 
   useEffect(() => {
     if (!hasSupabaseConfig) return
-    supabase.auth.getSession().then(({ data }) => {
+    let active = true
+    supabase.auth.getSession().then(({ data, error: sessionError }) => {
+      if (sessionError) throw sessionError
+      if (!active) return
       setSession(data.session)
-      setAuthReady(true)
-    })
+    }).catch((cause: unknown) => {
+      if (!active) return
+      setSession(null)
+      setAuthError(cause instanceof Error ? cause.message : 'Could not restore your sign-in session.')
+    }).finally(() => { if (active) setAuthReady(true) })
     const { data } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!active) return
       setSession(nextSession)
+      setAuthError('')
       setAuthReady(true)
     })
-    return () => data.subscription.unsubscribe()
+    return () => {
+      active = false
+      data.subscription.unsubscribe()
+    }
   }, [])
 
   const userId = session?.user.id
@@ -137,9 +151,11 @@ export default function App() {
       {/* Diagnostics have no workflow link; in production the route is disabled. */}
       <Route
         path="/devtools"
-        element={import.meta.env.DEV
-          ? <DevTools userId={session?.user.id} email={session?.user.email} />
-          : <Navigate to={session ? '/dashboard' : '/'} replace />}
+        element={<AsyncRoute>
+          {import.meta.env.DEV
+            ? <DevTools userId={session?.user.id} email={session?.user.email} />
+            : <Navigate to={session ? '/dashboard' : '/'} replace />}
+        </AsyncRoute>}
       />
       {session ? (
         <Route element={
@@ -154,16 +170,16 @@ export default function App() {
           />
         }>
           <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<DashboardRoute />} />
+          <Route path="dashboard" element={<AsyncRoute><DashboardRoute /></AsyncRoute>} />
           <Route path="budget" element={<Budget />} />
-          <Route path="transactions" element={<Transactions />} />
-          <Route path="accounts" element={<Accounts />} />
-          <Route path="analytics" element={<Analytics />} />
-          <Route path="settings" element={<SettingsRoute />} />
+          <Route path="transactions" element={<AsyncRoute><Transactions /></AsyncRoute>} />
+          <Route path="accounts" element={<AsyncRoute><Accounts /></AsyncRoute>} />
+          <Route path="analytics" element={<AsyncRoute><Analytics /></AsyncRoute>} />
+          <Route path="settings" element={<AsyncRoute><SettingsRoute /></AsyncRoute>} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       ) : (
-        <Route path="*" element={<Login />} />
+        <Route path="*" element={<AsyncRoute><Login key={authError} initialError={authError} /></AsyncRoute>} />
       )}
     </Routes>
   )
@@ -308,7 +324,11 @@ function WorkspaceLayout({
 
         {addKind && (
           <Modal title="Add transaction" onClose={() => setAddKind(null)}>
-            <QuickAdd key={addKind} initialKind={addKind} onDone={() => setAddKind(null)} />
+            <RouteErrorBoundary>
+              <Suspense fallback={<p className="py-8 text-center text-sm text-muted" role="status">Opening transaction form...</p>}>
+                <QuickAdd key={addKind} initialKind={addKind} onDone={() => setAddKind(null)} />
+              </Suspense>
+            </RouteErrorBoundary>
           </Modal>
         )}
         <CommandMenu isOpen={commandOpen} onOpen={() => setCommandOpen(true)} onClose={() => setCommandOpen(false)} items={commandItems} />
@@ -320,6 +340,14 @@ function WorkspaceLayout({
 function DashboardRoute() {
   const { navigateTab, setAddKind } = useWorkspaceActions()
   return <Dashboard onAdd={setAddKind} onNavigate={navigateTab} />
+}
+
+function RouteLoading() {
+  return <Card className="grid min-h-48 place-items-center p-6 text-sm text-muted" role="status" aria-live="polite">Opening page...</Card>
+}
+
+function AsyncRoute({ children }: { children: ReactNode }) {
+  return <RouteErrorBoundary><Suspense fallback={<RouteLoading />}>{children}</Suspense></RouteErrorBoundary>
 }
 
 function SettingsRoute() {
