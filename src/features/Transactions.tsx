@@ -21,6 +21,7 @@ import Money from '../components/Money'
 import { dateLabel } from '../domain/dates'
 import { cashEffect, describeEvent, TYPE_LABELS } from '../domain/describe'
 import { formatCents, parseDollars } from '../domain/money'
+import { isValidDate } from '../domain/validate'
 import type { EventType, LedgerEvent } from '../domain/types'
 import { useLedger } from '../storage/store'
 
@@ -63,7 +64,20 @@ export default function Transactions() {
   const q = query.trim().toLowerCase()
   const minCents = minAmount ? parseDollars(minAmount) : null
   const maxCents = maxAmount ? parseDollars(maxAmount) : null
+  const filterError =
+    (fromDate && !isValidDate(fromDate)) || (toDate && !isValidDate(toDate))
+      ? 'Enter valid dates for the transaction range.'
+      : fromDate && toDate && fromDate > toDate
+        ? 'The start date must be on or before the end date.'
+        : minAmount && minCents === null
+          ? 'Enter a valid minimum amount.'
+          : maxAmount && maxCents === null
+            ? 'Enter a valid maximum amount.'
+            : minCents !== null && maxCents !== null && minCents > maxCents
+              ? 'The minimum amount cannot be greater than the maximum amount.'
+              : ''
   const matches = (event: LedgerEvent) =>
+    !filterError &&
     (filter === 'all' || event.type === filter) &&
     (!fromDate || event.date >= fromDate) &&
     (!toDate || event.date <= toDate) &&
@@ -141,6 +155,7 @@ export default function Transactions() {
           <label className="text-xs text-muted">Min amount<Input inputMode="decimal" aria-label="Filter minimum amount" className="mt-1 h-9" placeholder="0.00" value={minAmount} onChange={(event) => setMinAmount(event.target.value)} /></label>
           <label className="text-xs text-muted">Max amount<Input inputMode="decimal" aria-label="Filter maximum amount" className="mt-1 h-9" placeholder="0.00" value={maxAmount} onChange={(event) => setMaxAmount(event.target.value)} /></label>
         </div>
+        {filterError && <p className="mt-2 text-sm text-bad" role="alert">{filterError}</p>}
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-line pt-3 text-xs text-muted">
           <SlidersHorizontal className="size-3.5" />
           <span>Showing <strong className="font-semibold text-ink">{filtered.length}</strong> of {events.length} transactions</span>

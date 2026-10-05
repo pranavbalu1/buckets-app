@@ -734,31 +734,41 @@ function WantCell({ bucket }: { bucket: Bucket }) {
   const updateBucket = useLedger((s) => s.updateBucket)
   const original = bucket.monthlyTargetCents ? centsToInput(bucket.monthlyTargetCents) : ''
   const [value, setValue] = useState(original)
+  const [error, setError] = useState('')
 
   async function save() {
     const trimmed = value.trim()
     const cents = trimmed === '' ? 0 : parseDollars(trimmed)
     if (cents === null) {
-      setValue(original)
+      setError('Enter a valid amount, such as 300 or 12.50.')
       return
     }
-    if (cents !== bucket.monthlyTargetCents) await updateBucket(bucket.id, { monthlyTargetCents: cents })
+    if (cents === bucket.monthlyTargetCents) {
+      setError('')
+      return
+    }
+    const saved = await updateBucket(bucket.id, { monthlyTargetCents: cents })
+    setError(saved ? '' : useLedger.getState().error ?? 'Could not update the monthly want.')
   }
 
   return (
-    <div className="flex min-w-0 items-center justify-end gap-0.5 rounded-md border border-foreground/20 bg-surface px-1.5 py-0.5 transition-colors hover:border-muted focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/25">
-      <span className="text-xs text-muted" aria-hidden>$</span>
-      <input
-        aria-label={`Monthly want for ${bucket.name}`}
-        title="Edit the monthly want. Press Enter or leave the field to save."
-        className="w-[4.5rem] min-w-0 bg-transparent py-0.5 text-right text-sm tabular-nums outline-none placeholder:text-muted/70"
-        inputMode="decimal"
-        placeholder="0.00"
-        value={value}
-        onChange={(e) => setValue(e.target.value)}
-        onBlur={save}
-        onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
-      />
+    <div className="min-w-0">
+      <div className={`flex min-w-0 items-center justify-end gap-0.5 rounded-md border bg-surface px-1.5 py-0.5 transition-colors hover:border-muted focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/25 ${error ? 'border-bad/60' : 'border-foreground/20'}`}>
+        <span className="text-xs text-muted" aria-hidden>$</span>
+        <input
+          aria-label={`Monthly want for ${bucket.name}`}
+          aria-invalid={Boolean(error)}
+          title="Edit the monthly want. Press Enter or leave the field to save."
+          className="w-[4.5rem] min-w-0 bg-transparent py-0.5 text-right text-sm tabular-nums outline-none placeholder:text-muted/70"
+          inputMode="decimal"
+          placeholder="0.00"
+          value={value}
+          onChange={(e) => { setValue(e.target.value); setError('') }}
+          onBlur={() => void save()}
+          onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+        />
+      </div>
+      {error && <p role="alert" className="mt-1 text-[10px] leading-4 text-bad">{error}</p>}
     </div>
   )
 }

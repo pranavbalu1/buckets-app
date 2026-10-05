@@ -2,6 +2,8 @@
 
 A private, manual-entry budgeting app built around envelope budgeting. Track account balances, assign income to buckets, follow rollover from month to month, review spending, and see how money moved through a selected week, month, or year.
 
+For a complete walkthrough of the user-facing features, see the [Buckets user guide](USER_GUIDE.md). This README covers technical setup, migrations, development, and deployment.
+
 The app is a static React front end backed by Supabase Postgres and Auth. It does not connect to banks, store receipts, use a custom server, or send analytics to third parties. All money values are stored as integer cents; balances and reports are derived from ledger events.
 
 The visual theme follows the included UI library: charcoal surfaces with electric lime, cyan, and emerald accents. The shipped Gilroy font files are used throughout the application.

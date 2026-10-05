@@ -1,6 +1,6 @@
 -- Clear the signed-in user's application data while leaving their Supabase Auth
 -- account and credentials untouched. The RPC runs atomically as the caller.
-create function clear_user_finance_data() returns void
+create or replace function clear_user_finance_data() returns void
 language plpgsql
 security invoker
 set search_path = public, pg_temp

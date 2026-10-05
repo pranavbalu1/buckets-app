@@ -4,7 +4,7 @@ import { makeEvent } from '../domain/events'
 import { maxAllocatable, maxReturnable } from '../domain/budget'
 import { centsToInput, formatCents, parseDollars } from '../domain/money'
 import type { DraftEvent, EventType, LedgerEvent } from '../domain/types'
-import { validateEvent } from '../domain/validate'
+import { directionSchema, validateEvent } from '../domain/validate'
 import type { AddKind } from '../nav'
 import { useLedger } from '../storage/store'
 import { Button } from '../components/ui/button'
@@ -110,6 +110,7 @@ export default function QuickAdd({
 
   async function submit(e: React.FormEvent) {
     e.preventDefault()
+    if (busy) return
     setError('')
     const cents = parseDollars(amount)
     if (cents === null || cents <= 0) {
@@ -145,6 +146,7 @@ export default function QuickAdd({
       : await addEvent(event)
     setBusy(false)
     if (ok) onDone?.()
+    else setError(useLedger.getState().error ?? 'Could not save this transaction.')
   }
 
   return (
@@ -163,10 +165,10 @@ export default function QuickAdd({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <FormField label="Amount">
-          <Input inputMode="decimal" placeholder="0.00" autoFocus value={amount} onChange={(e) => setAmount(e.target.value)} />
+          <Input inputMode="decimal" placeholder="0.00" autoFocus value={amount} aria-invalid={Boolean(error)} onChange={(e) => { setAmount(e.target.value); setError('') }} />
         </FormField>
         <FormField label="Date">
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <Input type="date" required value={date} aria-invalid={Boolean(error)} onChange={(e) => { setDate(e.target.value); setError('') }} />
         </FormField>
 
         {kind === 'expense' && <Select label="Category" value={bucketId} onChange={setBucketId} options={categoryOptions} />}
@@ -184,21 +186,24 @@ export default function QuickAdd({
         {kind === 'adjustment' && <Select label="Account" value={accountId} onChange={setAccountId} options={accounts} />}
         {(kind === 'allocation' || kind === 'adjustment') && (
           <FormField label={kind === 'allocation' ? 'Money movement' : 'Adjustment direction'}>
-            <select className="input" value={direction} onChange={(e) => setDirection(e.target.value as 'in' | 'out')}>
+            <select className="input" value={direction} onChange={(e) => {
+              const result = directionSchema.safeParse(e.target.value)
+              if (result.success) setDirection(result.data)
+            }}>
               {kind === 'allocation' ? <><option value="in">Assign to bucket</option><option value="out">Return to available</option></> : <><option value="in">Balance increases</option><option value="out">Balance decreases</option></>}
             </select>
           </FormField>
         )}
 
         <FormField label="Description (optional)">
-          <Input placeholder="e.g. Grocery run, paycheck" value={description} onChange={(e) => setDescription(e.target.value)} />
+          <Input maxLength={240} placeholder="e.g. Grocery run, paycheck" value={description} onChange={(e) => setDescription(e.target.value)} />
         </FormField>
         <FormField label="Payee (optional)">
-          <Input placeholder="e.g. Market Street" value={payee} onChange={(e) => setPayee(e.target.value)} />
+          <Input maxLength={120} placeholder="e.g. Market Street" value={payee} onChange={(e) => setPayee(e.target.value)} />
         </FormField>
         <div>
           <FormField label="Custom transaction type (optional)" helperText="Choose a saved type or enter a new one. It will be suggested after you save this transaction.">
-            <Input list="custom-transaction-types" placeholder="e.g. Medical, Reimbursement" value={customType} onChange={(e) => setCustomType(e.target.value)} />
+            <Input list="custom-transaction-types" maxLength={40} placeholder="e.g. Medical, Reimbursement" value={customType} onChange={(e) => setCustomType(e.target.value)} />
           </FormField>
           <datalist id="custom-transaction-types">
             {knownCustomTypes.map((label) => <option key={label} value={label} />)}
@@ -206,7 +211,7 @@ export default function QuickAdd({
         </div>
         <div className="sm:col-span-2">
           <FormField label="Notes (optional)">
-            <Input placeholder="Add a note" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            <Input maxLength={2_000} placeholder="Add a note" value={notes} onChange={(e) => setNotes(e.target.value)} />
           </FormField>
         </div>
       </div>

@@ -1,10 +1,15 @@
 import { z } from 'zod'
-import { ACCOUNT_TYPES, BUCKET_KINDS } from './models'
+import { ACCOUNT_TYPES, BUCKET_KINDS, LEGACY_BUCKET_KINDS } from './models'
 import type { DraftEvent } from './types'
 
 const eventTypes = ['income', 'allocation', 'expense', 'account_transfer', 'bucket_move', 'adjustment'] as const
 const planTypes = ['income', 'expense', 'account_transfer', 'bucket_move'] as const
 const frequencies = ['weekly', 'biweekly', 'monthly', 'yearly'] as const
+export const accountTypeSchema = z.enum(ACCOUNT_TYPES)
+export const bucketKindSchema = z.enum(BUCKET_KINDS)
+export const planTypeSchema = z.enum(planTypes)
+export const frequencySchema = z.enum(frequencies)
+export const directionSchema = z.enum(['in', 'out'])
 
 export function isValidDate(value: string): boolean {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
@@ -43,7 +48,7 @@ const colorSchema = z.string().regex(/^#[\da-f]{6}$/i, 'Choose a valid six-digit
 
 export const accountInputSchema = z.object({
   name: entityNameSchema,
-  type: z.enum(ACCOUNT_TYPES),
+  type: accountTypeSchema,
   openingBalanceCents: safeCentsSchema,
 })
 
@@ -67,7 +72,7 @@ export const groupPatchSchema = z.object({
 
 const bucketFields = {
   name: entityNameSchema,
-  kind: z.enum(BUCKET_KINDS),
+  kind: bucketKindSchema,
   groupId: nullableIdSchema,
   monthlyTargetCents: nonNegativeCentsSchema,
   targetCents: nonNegativeCentsSchema.nullable(),
@@ -90,9 +95,29 @@ export const bucketInputSchema = z.object(bucketFields).superRefine((bucket, con
   }
 })
 
+/** Accept existing legacy kinds while validating mutable fields on stored buckets. */
+export const bucketStateSchema = z.object({
+  ...bucketFields,
+  kind: z.union([bucketKindSchema, z.enum(LEGACY_BUCKET_KINDS)]),
+}).superRefine((bucket, context) => {
+  if (bucket.kind === 'spending' || bucket.kind === 'savings' || bucket.kind === 'obligation') return
+  if (bucket.kind === 'recurring' && bucket.monthlyTargetCents <= 0) {
+    context.addIssue({ code: 'custom', path: ['monthlyTargetCents'], message: 'Enter a monthly amount greater than zero.' })
+  }
+  if (bucket.kind === 'save_by_date' && (!bucket.targetCents || !bucket.targetDate)) {
+    context.addIssue({ code: 'custom', path: ['targetCents'], message: 'Add a target amount and date.' })
+  }
+  if (bucket.kind === 'save_by_deposit' && (!bucket.targetCents || bucket.monthlyTargetCents <= 0)) {
+    context.addIssue({ code: 'custom', path: ['monthlyTargetCents'], message: 'Add a target amount and a monthly deposit greater than zero.' })
+  }
+  if (bucket.kind === 'save_until_date' && (bucket.monthlyTargetCents <= 0 || !bucket.targetDate)) {
+    context.addIssue({ code: 'custom', path: ['targetDate'], message: 'Add a monthly amount and target date.' })
+  }
+})
+
 export const bucketPatchSchema = z.object({
   name: entityNameSchema.optional(),
-  kind: z.enum(BUCKET_KINDS).optional(),
+  kind: bucketKindSchema.optional(),
   groupId: nullableIdSchema.optional(),
   archived: z.boolean().optional(),
   sortOrder: z.number().int().nonnegative().safe().optional(),
@@ -111,7 +136,7 @@ export const ledgerEventSchema = z.object({
   toAccountId: nullableIdSchema,
   bucketId: nullableIdSchema,
   toBucketId: nullableIdSchema,
-  direction: z.enum(['in', 'out']).nullable(),
+  direction: directionSchema.nullable(),
   customType: customTypeSchema.nullable().optional(),
   description: optionalDescriptionSchema,
   payee: payeeSchema.nullable(),
@@ -151,7 +176,7 @@ export const ledgerEventSchema = z.object({
 
 export const recurringPlanInputSchema = z.object({
   name: entityNameSchema,
-  eventType: z.enum(planTypes),
+  eventType: planTypeSchema,
   amountCents: positiveCentsSchema,
   accountId: nullableIdSchema,
   toAccountId: nullableIdSchema,
@@ -160,7 +185,7 @@ export const recurringPlanInputSchema = z.object({
   description: optionalDescriptionSchema,
   payee: payeeSchema.nullable(),
   notes: notesSchema.nullable(),
-  frequency: z.enum(frequencies),
+  frequency: frequencySchema,
   startDate: dateSchema,
   endDate: dateSchema.nullable(),
   nextRun: dateSchema,

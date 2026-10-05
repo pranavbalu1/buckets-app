@@ -25,6 +25,7 @@ import { todayString } from '../domain/dates'
 import { ACCOUNT_TYPES, ACCOUNT_TYPE_LABELS } from '../domain/models'
 import type { Account, AccountType } from '../domain/models'
 import type { LedgerEvent } from '../domain/types'
+import { accountInputSchema, accountTypeSchema, firstIssueMessage } from '../domain/validate'
 import { useLedger } from '../storage/store'
 
 export default function Accounts() {
@@ -71,8 +72,12 @@ export default function Accounts() {
   async function submit(event: React.FormEvent) {
     event.preventDefault()
     const trimmed = name.trim()
-    if (!trimmed || savingAccount || pendingOpeningBalance) return
+    if (savingAccount || pendingOpeningBalance) return
     setFormError('')
+    if (!trimmed) {
+      setFormError('Enter an account name.')
+      return
+    }
     const rawBalance = startingBalance.trim()
     const negative = rawBalance.startsWith('-')
     const unsignedBalance = rawBalance.replace(/^[+-]/, '')
@@ -83,10 +88,22 @@ export default function Accounts() {
     }
 
     const openingBalanceCents = negative ? -parsedBalance : parsedBalance
+    const validated = accountInputSchema.safeParse({ name: trimmed, type, openingBalanceCents })
+    if (!validated.success) {
+      setFormError(firstIssueMessage(validated.error, 'Enter valid account details.'))
+      return
+    }
+    if (accounts.some((account) => account.name.trim().toLocaleLowerCase() === validated.data.name.toLocaleLowerCase())) {
+      setFormError('An account with that name already exists.')
+      return
+    }
     setSavingAccount(true)
-    const result = await addAccount(trimmed, type, openingBalanceCents)
+    const result = await addAccount(validated.data.name, validated.data.type, validated.data.openingBalanceCents)
     setSavingAccount(false)
-    if (!result.account) return
+    if (!result.account) {
+      setFormError(useLedger.getState().error ?? 'Could not create the account.')
+      return
+    }
 
     setName('')
     if (!result.openingBalanceSaved) {
@@ -156,13 +173,16 @@ export default function Accounts() {
           </div>
           <form onSubmit={(event) => void submit(event)} className="grid gap-3 sm:grid-cols-[minmax(0,1.25fr)_minmax(9rem,0.8fr)_minmax(9rem,0.8fr)_auto] sm:items-end">
             <FormField label="Account name" htmlFor="new-account-name" required>
-              <Input id="new-account-name" className="min-w-0" placeholder="e.g. Everyday checking" value={name} disabled={Boolean(pendingOpeningBalance) || savingAccount} onChange={(event) => setName(event.target.value)} />
+              <Input id="new-account-name" className="min-w-0" placeholder="e.g. Everyday checking" value={name} disabled={Boolean(pendingOpeningBalance) || savingAccount} onChange={(event) => { setName(event.target.value); setFormError('') }} aria-invalid={Boolean(formError)} />
             </FormField>
             <FormField label="Account type" htmlFor="new-account-type">
               <Select
                 id="new-account-type"
                 value={type}
-                onChange={(event) => setType(event.target.value as AccountType)}
+                onChange={(event) => {
+                  const result = accountTypeSchema.safeParse(event.target.value)
+                  if (result.success) setType(result.data)
+                }}
                 disabled={Boolean(pendingOpeningBalance) || savingAccount}
                 options={ACCOUNT_TYPES.map((item) => ({ value: item, label: ACCOUNT_TYPE_LABELS[item] }))}
                 className="h-[42px] rounded-lg border-line bg-surface shadow-none focus-visible:border-accent focus-visible:ring-accent/30"
@@ -316,7 +336,10 @@ function AccountRow({ account, balance, onHistory, onDragStart, onDragEnd, onDro
                 if (event.key === 'Escape') { setName(account.name); setType(account.type); setEditing(false) }
               }} />
               <Select aria-label="Account type" value={type}
-                onChange={(event) => setType(event.target.value as AccountType)}
+                onChange={(event) => {
+                  const result = accountTypeSchema.safeParse(event.target.value)
+                  if (result.success) setType(result.data)
+                }}
                 options={ACCOUNT_TYPES.map((item) => ({ value: item, label: ACCOUNT_TYPE_LABELS[item] }))}
                 className="h-8 py-1 text-xs" />
             </div>

@@ -2,54 +2,69 @@ import { z } from 'zod'
 import { ACCOUNT_TYPES, BUCKET_KINDS, LEGACY_BUCKET_KINDS } from '../domain/models'
 import type { Account, Bucket, BucketGroup } from '../domain/models'
 import type { EventType, LedgerEvent } from '../domain/types'
+import {
+  customTypeSchema,
+  dateSchema,
+  entityNameSchema,
+  ledgerEventSchema,
+  monthSchema,
+  notesSchema,
+  optionalDescriptionSchema,
+  payeeSchema,
+} from '../domain/validate'
+
+const safeInteger = z.number().int().safe()
+const sortOrderSchema = safeInteger.nonnegative()
+const colorSchema = z.string().regex(/^#[\da-f]{6}$/i).nullable()
+const nullableIdSchema = z.string().uuid().nullable()
 
 const EVENT_TYPES: [EventType, ...EventType[]] = [
   'income', 'allocation', 'expense', 'account_transfer', 'bucket_move', 'adjustment',
 ]
 
 const accountRow = z.object({
-  id: z.string(),
-  name: z.string(),
+  id: z.string().uuid(),
+  name: entityNameSchema,
   type: z.enum(ACCOUNT_TYPES),
-  sort_order: z.number().int().default(0),
+  sort_order: sortOrderSchema.default(0),
   archived: z.boolean(),
 })
 
 const groupRow = z.object({
-  id: z.string(),
-  name: z.string(),
-  sort_order: z.number().int(),
-  color: z.string().nullable().default(null),
+  id: z.string().uuid(),
+  name: entityNameSchema,
+  sort_order: sortOrderSchema,
+  color: colorSchema.default(null),
 })
 
 const bucketRow = z.object({
-  id: z.string(),
-  group_id: z.string().nullable(),
-  name: z.string(),
+  id: z.string().uuid(),
+  group_id: nullableIdSchema,
+  name: entityNameSchema,
   kind: z.union([z.enum(BUCKET_KINDS), z.enum(LEGACY_BUCKET_KINDS)]),
-  sort_order: z.number().int(),
+  sort_order: sortOrderSchema,
   archived: z.boolean(),
-  monthly_target_cents: z.number().int(),
-  target_cents: z.number().int().nullable().default(null),
-  target_date: z.string().nullable().default(null),
-  color: z.string().nullable(),
+  monthly_target_cents: safeInteger.nonnegative(),
+  target_cents: safeInteger.nonnegative().nullable().default(null),
+  target_date: dateSchema.nullable().default(null),
+  color: colorSchema,
 })
 
 const eventRow = z.object({
-  id: z.string(),
+  id: z.string().uuid(),
   type: z.enum(EVENT_TYPES),
-  date: z.string(),
-  month: z.string().nullable(),
-  amount_cents: z.number().int(),
-  account_id: z.string().nullable(),
-  to_account_id: z.string().nullable(),
-  bucket_id: z.string().nullable(),
-  to_bucket_id: z.string().nullable(),
+  date: dateSchema,
+  month: monthSchema.nullable(),
+  amount_cents: safeInteger.positive(),
+  account_id: nullableIdSchema,
+  to_account_id: nullableIdSchema,
+  bucket_id: nullableIdSchema,
+  to_bucket_id: nullableIdSchema,
   direction: z.enum(['in', 'out']).nullable(),
-  custom_type: z.string().nullable().default(null),
-  description: z.string(),
-  payee: z.string().nullable(),
-  notes: z.string().nullable(),
+  custom_type: customTypeSchema.nullable().default(null),
+  description: optionalDescriptionSchema,
+  payee: payeeSchema.nullable(),
+  notes: notesSchema.nullable(),
 })
 
 export const parseAccount = (row: unknown): Account => {
@@ -80,8 +95,7 @@ export function parseBucket(row: unknown): Bucket {
 
 export function parseEvent(row: unknown): LedgerEvent {
   const r = eventRow.parse(row)
-  return {
-    id: r.id,
+  const event = ledgerEventSchema.parse({
     type: r.type,
     date: r.date,
     month: r.month,
@@ -95,7 +109,8 @@ export function parseEvent(row: unknown): LedgerEvent {
     description: r.description,
     payee: r.payee,
     notes: r.notes,
-  }
+  })
+  return { ...event, id: r.id }
 }
 
 export type NewEvent = Omit<LedgerEvent, 'id'>

@@ -5,8 +5,14 @@ import BrandMark from '../components/BrandMark'
 import { Card } from '../components/ui/card'
 import { FormField } from '../components/ui/form-field'
 import { Input } from '../components/ui/input'
+import { z } from 'zod'
 import { supabase } from '../lib/supabase'
 import loginHero from '../assets/login-hero.jpg'
+
+const signInSchema = z.object({
+  email: z.email('Enter a valid email address.').max(254, 'Email addresses must be 254 characters or fewer.'),
+  password: z.string().min(1, 'Enter your password.').max(256, 'Password is too long.'),
+})
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -16,10 +22,15 @@ export default function Login() {
 
   async function submit(event: React.FormEvent) {
     event.preventDefault()
-    setBusy(true)
     setError('')
+    const input = signInSchema.safeParse({ email: email.trim().toLowerCase(), password })
+    if (!input.success) {
+      setError(input.error.issues[0]?.message ?? 'Enter valid sign-in details.')
+      return
+    }
+    setBusy(true)
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({ email, password })
+      const { error: signInError } = await supabase.auth.signInWithPassword(input.data)
       if (signInError) setError(signInError.message)
     } catch (signInError) {
       setError(signInError instanceof Error ? signInError.message : 'Unable to sign in. Please try again.')

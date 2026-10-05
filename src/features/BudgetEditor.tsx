@@ -10,6 +10,11 @@ import {
   bucketColor,
 } from '../domain/models'
 import type { Bucket, BucketGroup, BucketKind } from '../domain/models'
+import {
+  bucketInputSchema,
+  firstIssueMessage,
+  groupInputSchema,
+} from '../domain/validate'
 import { useLedger } from '../storage/store'
 
 type EditorTarget =
@@ -28,7 +33,7 @@ function BucketForm({ bucket, onClose }: { bucket?: Bucket; onClose: () => void 
   const addBucket = useLedger((s) => s.addBucket)
   const updateBucket = useLedger((s) => s.updateBucket)
   const removeBucket = useLedger((s) => s.removeBucket)
-  const initialKind = bucket && BUCKET_KINDS.includes(bucket.kind as BucketKind) ? bucket.kind as BucketKind : 'plain'
+  const initialKind = BUCKET_KINDS.find((supportedKind) => supportedKind === bucket?.kind) ?? 'plain'
   const [name, setName] = useState(bucket?.name ?? '')
   const [groupId, setGroupId] = useState(bucket?.groupId ?? '')
   const [kind, setKind] = useState<BucketKind>(initialKind)
@@ -45,11 +50,8 @@ function BucketForm({ bucket, onClose }: { bucket?: Bucket; onClose: () => void 
     if (!trimmed) return setError('Give the bucket a name')
     const monthlyCents = parseOptional(monthly)
     const targetCents = parseOptional(target)
-    if (monthlyCents === null || targetCents === null) return setError('Amounts must look like 300 or 12.50')
-    if (kind === 'save_by_date' && (!targetCents || !date)) return setError('Add a target amount and date')
-    if (kind === 'save_by_deposit' && (!targetCents || !monthlyCents)) return setError('Add a target amount and monthly deposit')
-    if (kind === 'save_until_date' && (!monthlyCents || !date)) return setError('Add a monthly amount and target date')
-    const values = {
+    if (monthlyCents === null || targetCents === null) return setError('Amounts must look like 300 or 12.50.')
+    const result = bucketInputSchema.safeParse({
       name: trimmed,
       groupId: groupId || null,
       kind,
@@ -57,11 +59,14 @@ function BucketForm({ bucket, onClose }: { bucket?: Bucket; onClose: () => void 
       targetCents: kind === 'save_by_date' || kind === 'save_by_deposit' ? targetCents : null,
       targetDate: kind === 'save_by_date' || kind === 'save_until_date' ? date || null : null,
       color,
-    }
+    })
+    if (!result.success) return setError(firstIssueMessage(result.error, 'Enter valid bucket details.'))
+    if (result.data.groupId && !groups.some((item) => item.id === result.data.groupId)) return setError('Choose a group that still exists.')
     setBusy(true)
-    const ok = bucket ? await updateBucket(bucket.id, values) : await addBucket(values)
+    const ok = bucket ? await updateBucket(bucket.id, result.data) : await addBucket(result.data)
     setBusy(false)
     if (ok) onClose()
+    else setError(useLedger.getState().error ?? 'Could not save the bucket.')
   }
 
   async function archive() {
@@ -76,7 +81,7 @@ function BucketForm({ bucket, onClose }: { bucket?: Bucket; onClose: () => void 
   return (
     <Modal title={bucket ? 'Edit bucket' : 'New bucket'} onClose={onClose}>
       <form onSubmit={save} className="space-y-4">
-        <Field label="Name"><input className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} /></Field>
+        <Field label="Name"><input className="input" required maxLength={100} autoFocus value={name} onChange={(e) => { setName(e.target.value); setError('') }} /></Field>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Group">
             <select className="input" value={groupId} onChange={(e) => setGroupId(e.target.value)}>
@@ -85,7 +90,10 @@ function BucketForm({ bucket, onClose }: { bucket?: Bucket; onClose: () => void 
             </select>
           </Field>
           <Field label="Type">
-            <select className="input" value={kind} onChange={(e) => setKind(e.target.value as BucketKind)}>
+            <select className="input" value={kind} onChange={(e) => {
+              const selected = BUCKET_KINDS.find((supportedKind) => supportedKind === e.target.value)
+              if (selected) setKind(selected)
+            }}>
               {BUCKET_KINDS.map((k) => <option key={k} value={k}>{BUCKET_KIND_LABELS[k]}</option>)}
             </select>
           </Field>
@@ -96,7 +104,7 @@ function BucketForm({ bucket, onClose }: { bucket?: Bucket; onClose: () => void 
         {kind === 'save_by_deposit' && <><MoneyField label="Target amount" value={target} onChange={setTarget} /><MoneyField label="Monthly deposit" value={monthly} onChange={setMonthly} /></>}
         {kind === 'save_until_date' && <><MoneyField label="Monthly deposit" value={monthly} onChange={setMonthly} /><DateField value={date} onChange={setDate} /></>}
         <ColorPicker value={color} onChange={setColor} />
-        {error && <p className="text-sm text-bad">{error}</p>}
+        {error && <p className="text-sm text-bad" role="alert">{error}</p>}
         <div className="flex flex-wrap items-center gap-2">
           <button disabled={busy} className="btn btn-primary">{busy ? 'Saving…' : 'Save'}</button>
           <button type="button" className="btn" onClick={onClose}>Cancel</button>
@@ -113,22 +121,27 @@ function GroupForm({ group, onClose }: { group?: BucketGroup; onClose: () => voi
   const removeGroup = useLedger((s) => s.removeGroup)
   const [name, setName] = useState(group?.name ?? '')
   const [color, setColor] = useState(group?.color ?? BUCKET_COLORS[0])
+  const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   async function save(e: React.FormEvent) {
     e.preventDefault()
-    if (!name.trim()) return
+    setError('')
+    const result = groupInputSchema.safeParse({ name, color })
+    if (!result.success) return setError(firstIssueMessage(result.error, 'Enter valid group details.'))
     setBusy(true)
-    const ok = group ? await updateGroup(group.id, { name: name.trim(), color }) : await addGroup(name.trim(), color)
+    const ok = group ? await updateGroup(group.id, result.data) : await addGroup(result.data.name, result.data.color)
     setBusy(false)
     if (ok) onClose()
+    else setError(useLedger.getState().error ?? 'Could not save the group.')
   }
   async function remove() {
     if (group && window.confirm(`Delete “${group.name}”? Its buckets will become ungrouped.`) && await removeGroup(group.id)) onClose()
   }
   return <Modal title={group ? 'Edit group' : 'New group'} onClose={onClose}>
     <form onSubmit={save} className="space-y-4">
-      <Field label="Group name"><input className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} /></Field>
+      <Field label="Group name"><input className="input" required maxLength={100} autoFocus value={name} onChange={(e) => { setName(e.target.value); setError('') }} /></Field>
       <ColorPicker value={color} onChange={setColor} />
+      {error && <p className="text-sm text-bad" role="alert">{error}</p>}
       <div className="flex gap-2"><button disabled={busy} className="btn btn-primary">{busy ? 'Saving…' : 'Save'}</button><button type="button" className="btn" onClick={onClose}>Cancel</button>{group && <button type="button" className="btn-link ml-auto text-bad" onClick={remove}>Delete group</button>}</div>
     </form>
   </Modal>

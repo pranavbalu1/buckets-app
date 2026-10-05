@@ -12,6 +12,7 @@ import {
   accountPatchSchema,
   bucketInputSchema,
   bucketPatchSchema,
+  bucketStateSchema,
   firstIssueMessage,
   groupInputSchema,
   groupPatchSchema,
@@ -283,7 +284,7 @@ export const useLedger = create<LedgerState>((set, get) => {
       const parsedPatch = bucketPatchSchema.safeParse(patch)
       if (!parsedPatch.success) return Promise.resolve(rejectInput(firstIssueMessage(parsedPatch.error)))
       patch = parsedPatch.data
-      const merged = bucketInputSchema.safeParse({ ...previous, ...patch })
+      const merged = bucketStateSchema.safeParse({ ...previous, ...patch })
       if (!merged.success) return Promise.resolve(rejectInput(firstIssueMessage(merged.error, 'Enter valid bucket details.')))
       patch = { ...patch, ...merged.data }
       if (patch.groupId && !get().groups.some((group) => group.id === patch.groupId)) {

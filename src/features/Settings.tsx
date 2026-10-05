@@ -18,21 +18,61 @@ import { useLedger } from '../storage/store'
 import { supabaseRepository } from '../storage/supabaseRepository'
 import { downloadBackup, parseBackup } from '../storage/backup'
 import type { ThemePreference } from '../lib/theme'
+import { z } from 'zod'
+import {
+  dateSchema,
+  entityNameSchema,
+  frequencySchema,
+  firstIssueMessage,
+  paycheckTemplateInputSchema,
+  planTypeSchema,
+  recurringPlanInputSchema,
+  reconciliationInputSchema,
+} from '../domain/validate'
 
-type PlanType = 'income' | 'expense' | 'account_transfer' | 'bucket_move'
-type Frequency = 'weekly' | 'biweekly' | 'monthly' | 'yearly'
-interface PlanRow {
-  id: string; name: string; event_type: PlanType; amount_cents: number; account_id: string | null
-  to_account_id: string | null; bucket_id: string | null; to_bucket_id: string | null
-  description: string; payee: string | null; notes: string | null; frequency: Frequency
-  start_date: string; end_date: string | null; next_run: string; active: boolean
-}
-interface Allocation { bucketId: string; cents: number }
-interface TemplateRow { id: string; name: string; account_id: string | null; allocations: Allocation[] }
-interface ReconciliationRow {
-  id: string; account_id: string; date: string; statement_balance_cents: number
-  app_balance_cents: number; adjustment_event_id: string | null
-}
+type PlanType = z.infer<typeof planTypeSchema>
+type Frequency = z.infer<typeof frequencySchema>
+const planRowSchema = z.object({
+  id: z.string().uuid(), name: entityNameSchema,
+  event_type: planTypeSchema,
+  amount_cents: z.number().int().positive().safe(),
+  account_id: z.string().uuid().nullable(), to_account_id: z.string().uuid().nullable(),
+  bucket_id: z.string().uuid().nullable(), to_bucket_id: z.string().uuid().nullable(),
+  description: z.string().max(240), payee: z.string().max(120).nullable(), notes: z.string().max(2_000).nullable(),
+  frequency: z.enum(['weekly', 'biweekly', 'monthly', 'yearly']),
+  start_date: dateSchema, end_date: dateSchema.nullable(), next_run: dateSchema, active: z.boolean(),
+}).superRefine((row, context) => {
+  const result = recurringPlanInputSchema.safeParse({
+    name: row.name, eventType: row.event_type, amountCents: row.amount_cents,
+    accountId: row.account_id, toAccountId: row.to_account_id,
+    bucketId: row.bucket_id, toBucketId: row.to_bucket_id,
+    description: row.description, payee: row.payee, notes: row.notes,
+    frequency: row.frequency, startDate: row.start_date, endDate: row.end_date, nextRun: row.next_run,
+  })
+  if (!result.success) result.error.issues.forEach((issue) => context.addIssue({ code: 'custom', path: issue.path, message: issue.message }))
+})
+const templateRowSchema = z.object({
+  id: z.string().uuid(), name: entityNameSchema, account_id: z.string().uuid().nullable(),
+  allocations: z.array(z.object({ bucketId: z.string().uuid(), cents: z.number().int().positive().safe() })),
+}).superRefine((row, context) => {
+  const result = paycheckTemplateInputSchema.safeParse({ name: row.name, accountId: row.account_id, allocations: row.allocations })
+  if (!result.success) result.error.issues.forEach((issue) => context.addIssue({ code: 'custom', path: issue.path, message: issue.message }))
+})
+const reconciliationRowSchema = z.object({
+  id: z.string().uuid(), account_id: z.string().uuid(), date: dateSchema,
+  statement_balance_cents: z.number().int().safe(), app_balance_cents: z.number().int().safe(),
+  adjustment_event_id: z.string().uuid().nullable(),
+}).superRefine((row, context) => {
+  const result = reconciliationInputSchema.safeParse({
+    accountId: row.account_id, date: row.date,
+    statementBalanceCents: row.statement_balance_cents, appBalanceCents: row.app_balance_cents,
+  })
+  if (!result.success) result.error.issues.forEach((issue) => context.addIssue({ code: 'custom', path: issue.path, message: issue.message }))
+})
+
+type PlanRow = z.infer<typeof planRowSchema>
+type TemplateRow = z.infer<typeof templateRowSchema>
+type ReconciliationRow = z.infer<typeof reconciliationRowSchema>
 interface PlanningData { plans: PlanRow[]; templates: TemplateRow[]; reconciliations: ReconciliationRow[] }
 
 const LAST_EXPORT_KEY = 'buckets.last-export.v1'
@@ -43,7 +83,7 @@ function fail(error: { message: string } | null) {
 }
 
 function readBalance(text: string): number | null {
-  const cleaned = text.trim().replace(/^\$/, '').replaceAll(',', '')
+  const cleaned = text.trim()
   const negative = cleaned.startsWith('-')
   const positive = cleaned.startsWith('+')
   const cents = parseDollars(cleaned.replace(/^[+-]/, ''))
@@ -100,9 +140,9 @@ export default function Settings({ userId, theme, onThemeChange }: {
       ])
       fail(plans.error); fail(templates.error); fail(reconciliations.error)
       return {
-        plans: plans.data as PlanRow[],
-        templates: (templates.data ?? []).map((row) => ({ ...row, allocations: Array.isArray(row.allocations) ? row.allocations as Allocation[] : [] })) as TemplateRow[],
-        reconciliations: reconciliations.data as ReconciliationRow[],
+        plans: z.array(planRowSchema).parse(plans.data ?? []),
+        templates: z.array(templateRowSchema).parse(templates.data ?? []),
+        reconciliations: z.array(reconciliationRowSchema).parse(reconciliations.data),
       }
     },
   })
@@ -145,6 +185,10 @@ export default function Settings({ userId, theme, onThemeChange }: {
 
   async function importFile(file?: File) {
     if (!file) return
+    if (file.size > 50 * 1024 * 1024) {
+      setError('This backup is larger than the 50 MB import limit.')
+      return
+    }
     setBackupBusy(true); setBackupMessage(''); setError('')
     try {
       const backup = parseBackup(JSON.parse(await file.text()))
@@ -164,31 +208,42 @@ export default function Settings({ userId, theme, onThemeChange }: {
     event.preventDefault(); setRecurringMessage(''); setError('')
     const cents = parseDollars(planAmount)
     if (!planName.trim() || cents === null || cents <= 0) { setError('Enter a plan name and a positive amount.'); return }
-    if (planEnd && planEnd < planStart) { setError('The end date must be on or after the start date.'); return }
-    if ((planType === 'income' || planType === 'expense' || planType === 'account_transfer') && !planAccount) {
-      setError('Choose the account for this plan.'); return
+    const candidate = {
+      name: planName,
+      eventType: planType,
+      amountCents: cents,
+      accountId: planType === 'income' || planType === 'expense' || planType === 'account_transfer' ? planAccount || null : null,
+      toAccountId: planType === 'account_transfer' ? planToAccount || null : null,
+      bucketId: planType === 'expense' || planType === 'bucket_move' ? planBucket || null : null,
+      toBucketId: planType === 'bucket_move' ? planToBucket || null : null,
+      description: '', payee: null, notes: null,
+      frequency, startDate: planStart, endDate: planEnd || null, nextRun: planStart,
     }
-    if ((planType === 'expense' || planType === 'bucket_move') && !planBucket) {
-      setError('Choose the bucket for this plan.'); return
+    const parsed = recurringPlanInputSchema.safeParse(candidate)
+    if (!parsed.success) { setError(firstIssueMessage(parsed.error, 'Enter a valid recurring plan.')); return }
+    if (parsed.data.accountId && !activeAccounts.some((account) => account.id === parsed.data.accountId)) { setError('Choose an active account for this plan.'); return }
+    for (const id of [parsed.data.toAccountId]) {
+      if (id && !activeAccounts.some((account) => account.id === id)) { setError('Choose an active destination account.'); return }
     }
-    if (planType === 'account_transfer' && (!planToAccount || planToAccount === planAccount)) {
-      setError('Choose two different accounts for this transfer.'); return
+    for (const id of [parsed.data.bucketId, parsed.data.toBucketId]) {
+      if (id && !activeBuckets.some((bucket) => bucket.id === id)) { setError('Choose an active bucket for this plan.'); return }
     }
-    if (planType === 'bucket_move' && (!planToBucket || planToBucket === planBucket)) {
-      setError('Choose two different buckets for this move.'); return
-    }
-    const common = { name: planName.trim(), event_type: planType, amount_cents: cents, frequency, start_date: planStart, next_run: planStart, end_date: planEnd || null }
     const shaped = {
-      ...common,
-      account_id: null as string | null,
-      to_account_id: null as string | null,
-      bucket_id: null as string | null,
-      to_bucket_id: null as string | null,
+      name: parsed.data.name,
+      event_type: parsed.data.eventType,
+      amount_cents: parsed.data.amountCents,
+      account_id: parsed.data.accountId,
+      to_account_id: parsed.data.toAccountId,
+      bucket_id: parsed.data.bucketId,
+      to_bucket_id: parsed.data.toBucketId,
+      description: parsed.data.description,
+      payee: parsed.data.payee,
+      notes: parsed.data.notes,
+      frequency: parsed.data.frequency,
+      start_date: parsed.data.startDate,
+      end_date: parsed.data.endDate,
+      next_run: parsed.data.nextRun,
     }
-    if (planType === 'income' || planType === 'expense' || planType === 'account_transfer') shaped.account_id = planAccount || null
-    if (planType === 'expense' || planType === 'bucket_move') shaped.bucket_id = planBucket || null
-    if (planType === 'account_transfer') shaped.to_account_id = planToAccount || null
-    if (planType === 'bucket_move') shaped.to_bucket_id = planToBucket || null
     try {
       const { error: insertError } = await supabase.from('recurring_plans').insert(shaped)
       if (insertError) throw new Error(insertError.message)
@@ -223,23 +278,29 @@ export default function Settings({ userId, theme, onThemeChange }: {
 
   async function saveTemplate(event: React.FormEvent) {
     event.preventDefault(); setTemplateMessage(''); setError('')
-    if (Object.values(allocationInputs).some((text) => text.trim() !== '' && (parseDollars(text) === null || parseDollars(text) === 0))) {
-      setError('Enter each bucket allocation as a positive dollar amount, or leave it blank.'); return
-    }
+    const invalidAllocation = Object.values(allocationInputs).some((text) => text.trim() !== '' && (parseDollars(text) === null || parseDollars(text) === 0))
+    if (invalidAllocation) { setError('Enter each bucket allocation as a positive dollar amount, or leave it blank.'); return }
     const allocations = Object.entries(allocationInputs).flatMap(([bucketId, text]) => {
       const cents = parseDollars(text)
       return cents && cents > 0 ? [{ bucketId, cents }] : []
     })
-    if (!templateName.trim() || !templateAccount || allocations.length === 0) {
-      setError('Add a name, deposit account, and at least one bucket allocation.')
+    const parsed = paycheckTemplateInputSchema.safeParse({ name: templateName, accountId: templateAccount || null, allocations })
+    if (!parsed.success) { setError(firstIssueMessage(parsed.error, 'Enter a valid paycheck template.')); return }
+    if (!activeAccounts.some((account) => account.id === parsed.data.accountId)) { setError('Choose an active deposit account.'); return }
+    if (parsed.data.allocations.some((item) => !activeBuckets.some((bucket) => bucket.id === item.bucketId))) {
+      setError('Remove allocations for buckets that are no longer active.')
       return
     }
-    const { error: insertError } = await supabase.from('paycheck_templates').insert({
-      name: templateName.trim(), account_id: templateAccount, allocations,
-    })
-    if (insertError) { setError(insertError.message); return }
-    setTemplateName(''); setAllocationInputs({}); setTemplateMessage('Paycheck template saved.')
-    await refreshPlanning()
+    try {
+      const { error: insertError } = await supabase.from('paycheck_templates').insert({
+        name: parsed.data.name, account_id: parsed.data.accountId, allocations: parsed.data.allocations,
+      })
+      if (insertError) throw new Error(insertError.message)
+      setTemplateName(''); setAllocationInputs({}); setTemplateMessage('Paycheck template saved.')
+      await refreshPlanning()
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not save this paycheck template.')
+    }
   }
 
   async function deleteTemplate(template: TemplateRow) {
@@ -253,6 +314,10 @@ export default function Settings({ userId, theme, onThemeChange }: {
     if (!applyTemplate) return
     const cents = parseDollars(applyAmount)
     if (cents === null || cents <= 0) { setApplyError('Enter a positive paycheck amount.'); return }
+    const dateResult = dateSchema.safeParse(applyDate)
+    if (!dateResult.success) { setApplyError(firstIssueMessage(dateResult.error)); return }
+    if (!activeAccounts.some((account) => account.id === applyTemplate.account_id)) { setApplyError('The template deposit account is no longer active.'); return }
+    if (applyTemplate.allocations.some((item) => !activeBuckets.some((bucket) => bucket.id === item.bucketId))) { setApplyError('The template includes a bucket that is no longer active.'); return }
     const allocated = applyTemplate.allocations.reduce((sum, item) => sum + item.cents, 0)
     if (allocated > cents) { setApplyError(`The template allocates ${formatCents(allocated)}, more than this paycheck.`); return }
     const income = { ...makeEvent({ type: 'income', date: applyDate, amountCents: cents, accountId: applyTemplate.account_id, description: applyTemplate.name }), id: 'paycheck-preview' }
@@ -273,19 +338,31 @@ export default function Settings({ userId, theme, onThemeChange }: {
 
   async function reconcile(event: React.FormEvent) {
     event.preventDefault(); setError(''); setReconciliationMessage('')
-    if (!reconcileAccount || parsedStatement === null) { setError('Enter a valid statement balance.'); return }
-    const { error: rpcError } = await supabase.rpc('record_reconciliation', {
-      p_account_id: reconcileAccount,
-      p_date: reconcileDate,
-      p_statement_balance_cents: parsedStatement,
-      p_app_balance_cents: selectedAccountBalance,
-      p_post_adjustment: postAdjustment,
+    if (parsedStatement === null) { setError('Enter a valid statement balance.'); return }
+    const parsed = reconciliationInputSchema.safeParse({
+      accountId: reconcileAccount || null,
+      date: reconcileDate,
+      statementBalanceCents: parsedStatement,
+      appBalanceCents: selectedAccountBalance,
     })
-    if (rpcError) { setError(rpcError.message); return }
-    if (postAdjustment && difference !== 0) await queryClient.invalidateQueries({ queryKey: ['ledger'] })
-    await refreshPlanning()
-    setReconciliationMessage(postAdjustment && difference !== 0 ? `Reconciliation saved and ${formatCents(Math.abs(difference ?? 0))} adjustment added.` : 'Reconciliation saved. No ledger adjustment was added.')
-    setStatementBalance('')
+    if (!parsed.success) { setError(firstIssueMessage(parsed.error, 'Enter a valid reconciliation.')); return }
+    if (!activeAccounts.some((account) => account.id === parsed.data.accountId)) { setError('Choose an active account.'); return }
+    try {
+      const { error: rpcError } = await supabase.rpc('record_reconciliation', {
+        p_account_id: parsed.data.accountId,
+        p_date: parsed.data.date,
+        p_statement_balance_cents: parsed.data.statementBalanceCents,
+        p_app_balance_cents: parsed.data.appBalanceCents,
+        p_post_adjustment: postAdjustment,
+      })
+      if (rpcError) throw new Error(rpcError.message)
+      if (postAdjustment && difference !== 0) await queryClient.invalidateQueries({ queryKey: ['ledger'] })
+      await refreshPlanning()
+      setReconciliationMessage(postAdjustment && difference !== 0 ? `Reconciliation saved and ${formatCents(Math.abs(difference ?? 0))} adjustment added.` : 'Reconciliation saved. No ledger adjustment was added.')
+      setStatementBalance('')
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Could not save this reconciliation.')
+    }
   }
 
   const accountName = (id: string | null) => ledger.accounts.find((account) => account.id === id)?.name ?? 'Deleted account'
@@ -305,7 +382,7 @@ export default function Settings({ userId, theme, onThemeChange }: {
         </div>
         <div className="w-full sm:max-w-56">
           <FormField label="Color theme">
-            <Select value={theme} onChange={(event) => onThemeChange(event.target.value as ThemePreference)} options={[
+            <Select value={theme} onChange={(event) => onThemeChange(event.target.value === 'light' ? 'light' : 'dark')} options={[
               { value: 'dark', label: 'Dark - library palette' },
               { value: 'light', label: 'Light - accessible contrast' },
             ]} />
@@ -341,9 +418,9 @@ export default function Settings({ userId, theme, onThemeChange }: {
           <form onSubmit={saveRecurring} className="space-y-3 border-b border-border/70 pb-5">
             <div className="grid gap-3 sm:grid-cols-2">
               <FormField label="Plan name"><Input required placeholder="Rent, paycheck, subscription" value={planName} onChange={(event) => setPlanName(event.target.value)} /></FormField>
-              <FormField label="Transaction type"><Select value={planType} onChange={(event) => setPlanType(event.target.value as PlanType)} options={[{ value: 'income', label: 'Income' }, { value: 'expense', label: 'Expense' }, { value: 'account_transfer', label: 'Account transfer' }, { value: 'bucket_move', label: 'Bucket move' }]} /></FormField>
+              <FormField label="Transaction type"><Select value={planType} onChange={(event) => { const result = planTypeSchema.safeParse(event.target.value); if (result.success) setPlanType(result.data) }} options={[{ value: 'income', label: 'Income' }, { value: 'expense', label: 'Expense' }, { value: 'account_transfer', label: 'Account transfer' }, { value: 'bucket_move', label: 'Bucket move' }]} /></FormField>
               <FormField label="Amount"><Input inputMode="decimal" placeholder="0.00" value={planAmount} onChange={(event) => setPlanAmount(event.target.value)} /></FormField>
-              <FormField label="Frequency"><Select value={frequency} onChange={(event) => setFrequency(event.target.value as Frequency)} options={[{ value: 'weekly', label: 'Weekly' }, { value: 'biweekly', label: 'Every two weeks' }, { value: 'monthly', label: 'Monthly' }, { value: 'yearly', label: 'Yearly' }]} /></FormField>
+              <FormField label="Frequency"><Select value={frequency} onChange={(event) => { const result = frequencySchema.safeParse(event.target.value); if (result.success) setFrequency(result.data) }} options={[{ value: 'weekly', label: 'Weekly' }, { value: 'biweekly', label: 'Every two weeks' }, { value: 'monthly', label: 'Monthly' }, { value: 'yearly', label: 'Yearly' }]} /></FormField>
               <FormField label="First occurrence"><Input type="date" value={planStart} onChange={(event) => setPlanStart(event.target.value)} /></FormField>
               <FormField label="End date (optional)"><Input type="date" value={planEnd} onChange={(event) => setPlanEnd(event.target.value)} /></FormField>
               {(planType === 'income' || planType === 'expense' || planType === 'account_transfer') && <FormField label={planType === 'income' ? 'Deposit to' : 'From account'}><Select value={planAccount} onChange={(event) => setPlanAccount(event.target.value)} options={activeAccounts.map((account) => ({ value: account.id, label: account.name }))} placeholder="Choose account" /></FormField>}

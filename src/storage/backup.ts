@@ -1,48 +1,105 @@
 import { z } from 'zod'
 import { ACCOUNT_TYPES, BUCKET_KINDS, LEGACY_BUCKET_KINDS } from '../domain/models'
+import {
+  dateSchema,
+  entityNameSchema,
+  ledgerEventSchema,
+  paycheckTemplateInputSchema,
+  reconciliationInputSchema,
+  recurringPlanInputSchema,
+} from '../domain/validate'
 
+const safeInteger = z.number().int().safe()
+const sortOrder = safeInteger.nonnegative()
+const color = z.string().regex(/^#[\da-f]{6}$/i).nullable()
 const account = z.object({
-  id: z.string().uuid(), name: z.string(), type: z.enum(ACCOUNT_TYPES),
-  sortOrder: z.number().int(), archived: z.boolean(),
+  id: z.string().uuid(), name: entityNameSchema, type: z.enum(ACCOUNT_TYPES),
+  sortOrder, archived: z.boolean(),
 })
 const group = z.object({
-  id: z.string().uuid(), name: z.string(), sortOrder: z.number().int(), color: z.string().nullable(),
+  id: z.string().uuid(), name: entityNameSchema, sortOrder, color,
 })
 const bucket = z.object({
-  id: z.string().uuid(), groupId: z.string().uuid().nullable(), name: z.string(),
+  id: z.string().uuid(), groupId: z.string().uuid().nullable(), name: entityNameSchema,
   kind: z.union([z.enum(BUCKET_KINDS), z.enum(LEGACY_BUCKET_KINDS)]),
-  sortOrder: z.number().int(), archived: z.boolean(), monthlyTargetCents: z.number().int(),
-  targetCents: z.number().int().nullable(), targetDate: z.string().nullable(), color: z.string().nullable(),
+  sortOrder, archived: z.boolean(), monthlyTargetCents: safeInteger.nonnegative(),
+  targetCents: safeInteger.nonnegative().nullable(), targetDate: dateSchema.nullable(), color,
 })
-const event = z.object({
-  id: z.string().uuid(), type: z.enum(['income', 'allocation', 'expense', 'account_transfer', 'bucket_move', 'adjustment']),
-  date: z.string(), month: z.string().nullable(), amountCents: z.number().int(),
-  accountId: z.string().uuid().nullable(), toAccountId: z.string().uuid().nullable(),
-  bucketId: z.string().uuid().nullable(), toBucketId: z.string().uuid().nullable(),
-  direction: z.enum(['in', 'out']).nullable(), customType: z.string().trim().min(1).max(40).nullable().default(null),
-  description: z.string(), payee: z.string().nullable(), notes: z.string().nullable(),
-})
+const event = z.intersection(z.object({ id: z.string().uuid() }), ledgerEventSchema)
 const recurringPlan = z.object({
-  id: z.string().uuid(), name: z.string(), eventType: z.enum(['income', 'expense', 'account_transfer', 'bucket_move']),
-  amountCents: z.number().int().positive(), accountId: z.string().uuid().nullable(),
+  id: z.string().uuid(), name: entityNameSchema, eventType: z.enum(['income', 'expense', 'account_transfer', 'bucket_move']),
+  amountCents: safeInteger.positive(), accountId: z.string().uuid().nullable(),
   toAccountId: z.string().uuid().nullable(), bucketId: z.string().uuid().nullable(), toBucketId: z.string().uuid().nullable(),
-  description: z.string(), payee: z.string().nullable(), notes: z.string().nullable(),
-  frequency: z.enum(['weekly', 'biweekly', 'monthly', 'yearly']), startDate: z.string(),
-  endDate: z.string().nullable(), nextRun: z.string(), active: z.boolean(),
+  description: z.string().trim().max(240), payee: z.string().trim().max(120).nullable(), notes: z.string().trim().max(2_000).nullable(),
+  frequency: z.enum(['weekly', 'biweekly', 'monthly', 'yearly']), startDate: dateSchema,
+  endDate: dateSchema.nullable(), nextRun: dateSchema, active: z.boolean(),
+}).superRefine((row, context) => {
+  const result = recurringPlanInputSchema.safeParse({
+    name: row.name, eventType: row.eventType, amountCents: row.amountCents,
+    accountId: row.accountId, toAccountId: row.toAccountId, bucketId: row.bucketId, toBucketId: row.toBucketId,
+    description: row.description, payee: row.payee, notes: row.notes, frequency: row.frequency,
+    startDate: row.startDate, endDate: row.endDate, nextRun: row.nextRun,
+  })
+  if (!result.success) result.error.issues.forEach((issue) => context.addIssue({ code: 'custom', path: issue.path, message: issue.message }))
 })
 const paycheckTemplate = z.object({
-  id: z.string().uuid(), name: z.string(), accountId: z.string().uuid().nullable(),
-  allocations: z.array(z.object({ bucketId: z.string().uuid(), cents: z.number().int().positive() })),
+  id: z.string().uuid(), name: entityNameSchema, accountId: z.string().uuid().nullable(),
+  allocations: z.array(z.object({ bucketId: z.string().uuid(), cents: safeInteger.positive() })).max(50_000),
+}).superRefine((row, context) => {
+  const result = paycheckTemplateInputSchema.safeParse({ name: row.name, accountId: row.accountId, allocations: row.allocations })
+  if (!result.success) result.error.issues.forEach((issue) => context.addIssue({ code: 'custom', path: issue.path, message: issue.message }))
 })
 const reconciliation = z.object({
-  id: z.string().uuid(), accountId: z.string().uuid(), date: z.string(),
-  statementBalanceCents: z.number().int(), appBalanceCents: z.number().int(), adjustmentEventId: z.string().uuid().nullable(),
+  id: z.string().uuid(), accountId: z.string().uuid(), date: dateSchema,
+  statementBalanceCents: safeInteger, appBalanceCents: safeInteger, adjustmentEventId: z.string().uuid().nullable(),
+}).superRefine((row, context) => {
+  const result = reconciliationInputSchema.safeParse({
+    accountId: row.accountId, date: row.date,
+    statementBalanceCents: row.statementBalanceCents, appBalanceCents: row.appBalanceCents,
+  })
+  if (!result.success) result.error.issues.forEach((issue) => context.addIssue({ code: 'custom', path: issue.path, message: issue.message }))
 })
 
 export const backupSchema = z.object({
-  format: z.literal('buckets-backup'), version: z.literal(1), exportedAt: z.string(),
-  accounts: z.array(account), groups: z.array(group), buckets: z.array(bucket), events: z.array(event),
-  recurringPlans: z.array(recurringPlan), paycheckTemplates: z.array(paycheckTemplate), reconciliations: z.array(reconciliation),
+  format: z.literal('buckets-backup'), version: z.literal(1), exportedAt: z.iso.datetime(),
+  accounts: z.array(account).max(10_000), groups: z.array(group).max(10_000), buckets: z.array(bucket).max(50_000), events: z.array(event).max(250_000),
+  recurringPlans: z.array(recurringPlan).max(50_000), paycheckTemplates: z.array(paycheckTemplate).max(10_000), reconciliations: z.array(reconciliation).max(100_000),
+}).superRefine((backup, context) => {
+  const accountIds = new Set(backup.accounts.map((row) => row.id))
+  const groupIds = new Set(backup.groups.map((row) => row.id))
+  const bucketIds = new Set(backup.buckets.map((row) => row.id))
+  const eventIds = new Set(backup.events.map((row) => row.id))
+  const idCollections = [
+    backup.accounts.map((row) => row.id), backup.groups.map((row) => row.id),
+    backup.buckets.map((row) => row.id), backup.events.map((row) => row.id),
+    backup.recurringPlans.map((row) => row.id), backup.paycheckTemplates.map((row) => row.id),
+    backup.reconciliations.map((row) => row.id),
+  ].flat()
+  if (new Set(idCollections).size !== idCollections.length) context.addIssue({ code: 'custom', path: [], message: 'This backup contains duplicate record IDs.' })
+  const requireRef = (id: string | null, ids: Set<string>, path: (string | number)[]) => {
+    if (id && !ids.has(id)) context.addIssue({ code: 'custom', path, message: 'This backup references a record that is missing from the file.' })
+  }
+  backup.buckets.forEach((row, index) => requireRef(row.groupId, groupIds, ['buckets', index, 'groupId']))
+  backup.events.forEach((row, index) => {
+    requireRef(row.accountId, accountIds, ['events', index, 'accountId'])
+    requireRef(row.toAccountId, accountIds, ['events', index, 'toAccountId'])
+    requireRef(row.bucketId, bucketIds, ['events', index, 'bucketId'])
+    requireRef(row.toBucketId, bucketIds, ['events', index, 'toBucketId'])
+  })
+  backup.recurringPlans.forEach((row, index) => {
+    requireRef(row.accountId, accountIds, ['recurringPlans', index, 'accountId'])
+    requireRef(row.toAccountId, accountIds, ['recurringPlans', index, 'toAccountId'])
+    requireRef(row.bucketId, bucketIds, ['recurringPlans', index, 'bucketId'])
+    requireRef(row.toBucketId, bucketIds, ['recurringPlans', index, 'toBucketId'])
+  })
+  backup.paycheckTemplates.forEach((row, index) => {
+    requireRef(row.accountId, accountIds, ['paycheckTemplates', index, 'accountId'])
+    row.allocations.forEach((allocation, allocationIndex) => requireRef(allocation.bucketId, bucketIds, ['paycheckTemplates', index, 'allocations', allocationIndex, 'bucketId']))
+  })
+  backup.reconciliations.forEach((row, index) => {
+    requireRef(row.accountId, accountIds, ['reconciliations', index, 'accountId'])
+    requireRef(row.adjustmentEventId, eventIds, ['reconciliations', index, 'adjustmentEventId'])
+  })
 })
 
 export type AppBackup = z.infer<typeof backupSchema>
