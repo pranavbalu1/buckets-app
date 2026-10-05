@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ArchiveRestore, CalendarClock, Check, CircleDollarSign, Download, FileUp, Palette, Plus, WalletCards } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Card } from '../components/ui/card'
+import { Tile, TileBoard } from '../components/TileLayout'
 import { FormField } from '../components/ui/form-field'
 import { Input } from '../components/ui/input'
 import { Modal } from '../components/ui/modal'
@@ -375,6 +376,8 @@ export default function Settings({ userId, theme, onThemeChange }: {
       {planningQuery.error && <p role="alert" className="rounded-xl border border-destructive/25 bg-destructive/10 p-3 text-sm text-destructive">Could not load planning data: {(planningQuery.error as Error).message}</p>}
       {planningQuery.isLoading && <p className="text-sm text-muted-foreground" role="status">Loading your plans, templates, and reconciliation history…</p>}
 
+      <TileBoard page="settings" className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <Tile id="appearance" label="Appearance" className="col-span-full">
       <Card className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
         <div className="flex items-start gap-3">
           <span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary"><Palette className="size-4" /></span>
@@ -389,7 +392,9 @@ export default function Settings({ userId, theme, onThemeChange }: {
           </FormField>
         </div>
       </Card>
+      </Tile>
 
+      <Tile id="backups" label="Data and backups" className="col-span-full">
       <Card className="p-5 sm:p-6">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-start gap-3">
@@ -411,8 +416,9 @@ export default function Settings({ userId, theme, onThemeChange }: {
         </div>
         {backupMessage && <p role="status" className="mt-4 text-sm text-good">{backupMessage}</p>}
       </Card>
+      </Tile>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <Tile id="recurring-plans" label="Recurring plans">
         <Card className="p-5 sm:p-6">
           <div className="mb-4 flex items-start gap-3"><span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary"><CalendarClock className="size-4" /></span><div><h2 className="font-semibold">Recurring plans</h2><p className="mt-1 text-sm text-muted-foreground">Expected bills and income stay pending until you confirm them.</p></div></div>
           <form onSubmit={saveRecurring} className="space-y-3 border-b border-border/70 pb-5">
@@ -451,6 +457,8 @@ export default function Settings({ userId, theme, onThemeChange }: {
           </div>
         </Card>
 
+      </Tile>
+      <Tile id="paycheck-templates" label="Paycheck templates">
         <Card className="p-5 sm:p-6">
           <div className="mb-4 flex items-start gap-3"><span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary"><CircleDollarSign className="size-4" /></span><div><h2 className="font-semibold">Paycheck templates</h2><p className="mt-1 text-sm text-muted-foreground">Add one income entry and assign it to buckets with a single action.</p></div></div>
           <form onSubmit={saveTemplate} className="space-y-3 border-b border-border/70 pb-5">
@@ -477,9 +485,9 @@ export default function Settings({ userId, theme, onThemeChange }: {
             {planning && planning.templates.length === 0 && <p className="py-3 text-sm text-muted-foreground">No paycheck templates yet.</p>}
           </div>
         </Card>
-      </div>
+      </Tile>
 
-      <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
+      <Tile id="account-reconciliation" label="Reconcile an account">
         <Card className="p-5 sm:p-6">
           <div className="mb-4 flex items-start gap-3"><span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary"><WalletCards className="size-4" /></span><div><h2 className="font-semibold">Reconcile an account</h2><p className="mt-1 text-sm text-muted-foreground">Compare the statement to your ledger. An adjustment preserves all history.</p></div></div>
           <form onSubmit={reconcile} className="space-y-3">
@@ -492,7 +500,9 @@ export default function Settings({ userId, theme, onThemeChange }: {
           </form>
           {reconciliationMessage && <p role="status" className="mt-3 text-sm text-good">{reconciliationMessage}</p>}
         </Card>
+      </Tile>
 
+      <Tile id="reconciliation-history" label="Reconciliation history">
         <Card className="p-5 sm:p-6">
           <div className="mb-4"><h2 className="font-semibold">Reconciliation history</h2><p className="mt-1 text-sm text-muted-foreground">Your last 100 statement checks.</p></div>
           <div className="overflow-x-auto">
@@ -502,7 +512,14 @@ export default function Settings({ userId, theme, onThemeChange }: {
           </div>
           {planning && planning.reconciliations.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">No reconciliations recorded yet.</p>}
         </Card>
-      </div>
+      </Tile>
+
+      <Tile id="security-note" label="Security note" className="col-span-full">
+      <Card className="p-4 text-xs leading-5 text-muted-foreground">
+        <strong className="text-foreground">Security note.</strong> The app uses the public Supabase anon key in the browser. RLS must stay enabled on every user table, and public sign-ups should be disabled after creating your account. Never add a service role key to the app or deployment environment.
+      </Card>
+      </Tile>
+      </TileBoard>
 
       {applyTemplate && <Modal title={`Apply ${applyTemplate.name}`} onClose={() => setApplyTemplate(null)}>
         <form onSubmit={postPaycheck} className="space-y-4">
@@ -517,10 +534,6 @@ export default function Settings({ userId, theme, onThemeChange }: {
           <div className="flex gap-2"><Button type="submit" variant="primary" disabled={applyBusy}>{applyBusy ? 'Saving…' : 'Add paycheck and assign'}</Button><Button type="button" onClick={() => setApplyTemplate(null)}>Cancel</Button></div>
         </form>
       </Modal>}
-
-      <Card className="p-4 text-xs leading-5 text-muted-foreground">
-        <strong className="text-foreground">Security note.</strong> The app uses the public Supabase anon key in the browser. RLS must stay enabled on every user table, and public sign-ups should be disabled after creating your account. Never add a service role key to the app or deployment environment.
-      </Card>
     </div>
   )
 }

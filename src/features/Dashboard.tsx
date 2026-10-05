@@ -13,6 +13,7 @@ import type { LucideIcon } from 'lucide-react'
 import Money from '../components/Money'
 import ProgressBar from '../components/ProgressBar'
 import { Card } from '../components/ui/card'
+import { Tile, TileBoard } from '../components/TileLayout'
 import { List, type ListItemData } from '../components/ui/list'
 import { MetricCard } from '../components/ui/metric-card'
 import { Button } from '../components/ui/button'
@@ -92,7 +93,8 @@ export default function Dashboard({ onAdd, onNavigate }: {
     .reduce((total, account) => total + (balances.accounts[account.id] ?? 0), 0)
 
   return (
-    <div className="space-y-6 md:space-y-8">
+    <TileBoard page="dashboard" className="grid grid-cols-1 gap-5 sm:grid-cols-2 md:gap-6 xl:grid-cols-4">
+      <Tile id="hero" label="Money overview" className="col-span-full">
       <section className="hero-panel relative overflow-hidden rounded-[1.75rem] p-6 text-foreground shadow-lg md:p-8">
         <div className="relative z-10 grid gap-8 lg:grid-cols-[1.35fr_0.65fr] lg:items-end">
           <div className="max-w-2xl">
@@ -140,15 +142,22 @@ export default function Dashboard({ onAdd, onNavigate }: {
         </div>
         <div className="hero-orb" aria-hidden />
       </section>
+      </Tile>
 
-      <section aria-label="Account and budget totals" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <Tile id="account-total" label="Money in accounts">
         <MetricCard type="compact" priority="medium" title="In your accounts" amount={formatCents(activeAccountTotal)} />
+      </Tile>
+      <Tile id="bucket-total" label="Money in buckets">
         <MetricCard type="compact" priority="medium" title="In your buckets" amount={formatCents(sum(balances.buckets))} />
+      </Tile>
+      <Tile id="ready-to-assign" label="Ready to assign">
         <MetricCard type="compact" priority={balances.unallocated === 0 ? 'medium' : 'high'} title={balances.unallocated >= 0 ? 'Ready to assign' : 'Buckets ahead of cash'} amount={formatCents(balances.unallocated)} />
+      </Tile>
+      <Tile id="monthly-target" label="Monthly target">
         <MetricCard type="compact" priority="low" title={target ? `Monthly target · ${targetProgress}% funded` : 'Monthly target'} amount={formatCents(target)} />
-      </section>
+      </Tile>
 
-      <div className="grid items-start gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+      <Tile id="monthly-snapshot" label="Monthly snapshot" className="col-span-full xl:col-span-2">
         <Card className="p-5 md:p-6">
           <div className="mb-5 flex items-start justify-between gap-4">
             <div>
@@ -174,7 +183,9 @@ export default function Dashboard({ onAdd, onNavigate }: {
             {target > 0 && <p className="mt-2 text-xs text-muted">{formatCents(monthly.allocatedCents)} assigned toward {formatCents(target)}</p>}
           </div>
         </Card>
+      </Tile>
 
+      <Tile id="quick-actions" label="Quick actions" className="col-span-full xl:col-span-2">
         <Card className="p-5 md:p-6">
           <div className="mb-4 flex items-center gap-3">
             <span className="grid size-9 place-items-center rounded-xl bg-accent-soft text-accent"><WalletCards className="size-4" /></span>
@@ -190,9 +201,10 @@ export default function Dashboard({ onAdd, onNavigate }: {
             <ActionButton label="Analytics and money flow" hint="See weekly, monthly, and yearly patterns" icon={BarChart3} onClick={() => onNavigate('Analytics')} />
           </div>
         </Card>
-      </div>
+      </Tile>
 
       {overspent.length > 0 && (
+        <Tile id="needs-attention" label="Overdrawn buckets" className="col-span-full">
         <Card className="border-bad/35 bg-bad-soft/45 p-4 md:p-5">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
@@ -210,8 +222,10 @@ export default function Dashboard({ onAdd, onNavigate }: {
             ))}
           </ul>
         </Card>
+        </Tile>
       )}
 
+      <Tile id="recent-activity" label="Recent activity" className="col-span-full">
       {recentItems.length > 0 ? (
         <List
           title="Recent activity"
@@ -233,7 +247,8 @@ export default function Dashboard({ onAdd, onNavigate }: {
           <p className="mt-1 text-sm text-muted">Record an expense or income to see your money move.</p>
         </Card>
       )}
-    </div>
+      </Tile>
+    </TileBoard>
   )
 }
 

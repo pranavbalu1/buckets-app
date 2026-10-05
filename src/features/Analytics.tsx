@@ -3,6 +3,7 @@ import { addMonths, addWeeks, addYears, format } from 'date-fns'
 import { ArrowLeft, ArrowRight, BarChart3, CircleDollarSign, ReceiptText, WalletCards } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Card } from '../components/ui/card'
+import { Tile, TileBoard } from '../components/TileLayout'
 import { AreaLineGraph, BudgetGaugeGraph, SemiGaugeGraph, StackedBarGraph } from '../components/ui/charts'
 import { MetricCard } from '../components/ui/metric-card'
 import { Select } from '../components/ui/select'
@@ -120,7 +121,8 @@ export default function Analytics() {
   const selectedBucketLabel = bucketOptions.find((option) => option.value === budgetBucketId)?.label ?? 'Selected bucket'
 
   return (
-    <div className="space-y-5 md:space-y-6">
+    <TileBoard page="analytics" className="grid grid-cols-1 gap-5 md:gap-6 sm:grid-cols-2 xl:grid-cols-6">
+      <Tile id="period-controls" label="Analytics period" className="col-span-full">
       <Card className="flex flex-col gap-4 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <span className="grid size-10 place-items-center rounded-xl bg-primary/10 text-primary"><BarChart3 className="size-5" /></span>
@@ -143,7 +145,9 @@ export default function Analytics() {
           <Button size="icon" aria-label="Next period" onClick={() => changePeriod(1)}><ArrowRight className="size-4" /></Button>
         </div>
       </Card>
+      </Tile>
 
+      <Tile id="period-selector" label="Choose analytics period" className="col-span-full">
       <SegmentedControl
         value={period}
         onChange={(value) => {
@@ -152,16 +156,25 @@ export default function Analytics() {
         options={[{ id: 'week', label: 'Week' }, { id: 'month', label: 'Month' }, { id: 'year', label: 'Year' }]}
         className="sm:max-w-md"
       />
+      </Tile>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5" aria-label="Period totals">
+      <Tile id="income-total" label="Period income">
         <MetricCard type="compact" priority="medium" title="Income" amount={formatCents(summary.incomeCents)} subtitle="Received in period" />
+      </Tile>
+      <Tile id="spending-total" label="Period spending">
         <MetricCard type="compact" priority="medium" title="Spending" amount={formatCents(summary.spendingCents)} subtitle="Recorded expenses" />
+      </Tile>
+      <Tile id="savings-total" label="Savings contributions" className="sm:col-span-2 xl:col-span-2">
         <MetricCard type="compact" priority="high" title="Savings contributions" amount={formatCents(summary.savingsCents)} subtitle={`${summary.savingsRate.toFixed(1)}% rate · ${formatCents(summary.savingsGrowthCents)} growth`} />
+      </Tile>
+      <Tile id="net-activity-total" label="Net activity">
         <MetricCard type="compact" priority="low" title="Net activity" amount={formatCents(summary.netActivityCents)} subtitle="Income minus spending" />
+      </Tile>
+      <Tile id="average-expense-total" label="Average expense">
         <MetricCard type="compact" priority="low" title="Average expense" amount={formatCents(summary.averageExpenseCents)} subtitle={`${summary.largestExpenses.length ? 'Largest expense' : 'No expenses'}${summary.largestExpenses[0] ? ` · ${formatCents(summary.largestExpenses[0].amountCents)}` : ''}`} />
-      </section>
+      </Tile>
 
-      <div className="grid items-stretch gap-4 xl:grid-cols-[2fr_1fr]">
+      <Tile id="spending-category-chart" label="Spending by category" className="sm:col-span-full xl:col-span-4">
         {spendingBars.some((row) => row.segments.length > 0) ? (
           <StackedBarGraph
             key={period}
@@ -179,13 +192,16 @@ export default function Analytics() {
         ) : (
           <Card className="p-4 sm:p-5"><h2 className="font-semibold">Spending by category</h2><EmptyChart>No spending recorded in this period.</EmptyChart></Card>
         )}
+      </Tile>
+      <Tile id="spending-bucket-chart" label="Spending by bucket" className="sm:col-span-full xl:col-span-2">
         {spendingCategories.length ? (
           <SemiGaugeGraph title="Spending by bucket" amount={formatCents(summary.spendingCents)} categories={spendingCategories} />
         ) : (
           <Card className="p-4 sm:p-5"><h2 className="font-semibold">Spending by bucket</h2><EmptyChart>No spending recorded in this period.</EmptyChart></Card>
         )}
-      </div>
+      </Tile>
 
+      <Tile id="spending-trend" label="Spending trend" className="col-span-full">
       <AreaLineGraph
         title="Spending trend"
         subtitle={`${summary.title} · ${period === 'year' ? 'Monthly' : 'Daily'} totals`}
@@ -194,7 +210,9 @@ export default function Analytics() {
         gradientStart="color-mix(in srgb, var(--color-chart-1) 28%, transparent)"
         gradientStop="transparent"
       />
+      </Tile>
 
+      <Tile id="budget-vs-actual" label="Budget versus actual" className="col-span-full">
       <Card className="p-4 sm:p-5">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2"><WalletCards className="size-4 text-primary" /><div><h2 className="font-semibold">Budget vs. actual</h2><p className="text-xs text-muted-foreground">Spent, budget, and remaining for this {period}.</p></div></div>
@@ -219,23 +237,26 @@ export default function Analytics() {
           </div>
         </div>
       </Card>
+      </Tile>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <Tile id="largest-expenses" label="Largest expenses" className="sm:col-span-full xl:col-span-3">
         <Card className="p-4 sm:p-5">
           <div className="mb-4 flex items-center gap-2"><ReceiptText className="size-4 text-primary" /><div><h2 className="font-semibold">Largest expenses</h2><p className="text-xs text-muted-foreground">Highest individual entries in this period.</p></div></div>
           {summary.largestExpenses.length ? <ul className="divide-y divide-border/70">
             {summary.largestExpenses.map((event) => <li key={event.id} className="flex items-center justify-between gap-3 py-3"><span className="min-w-0"><strong className="block truncate text-sm">{event.payee || event.description || event.bucketName}</strong><span className="text-xs text-muted-foreground">{event.bucketName} · {event.date}</span></span><strong className="shrink-0 tabular-nums">{formatCents(event.amountCents)}</strong></li>)}
           </ul> : <EmptyChart>No expenses in this period.</EmptyChart>}
         </Card>
+      </Tile>
+      <Tile id="income-by-source" label="Income by source" className="sm:col-span-full xl:col-span-3">
         <Card className="p-4 sm:p-5">
           <div className="mb-4 flex items-center gap-2"><CircleDollarSign className="size-4 text-primary" /><div><h2 className="font-semibold">Income by source</h2><p className="text-xs text-muted-foreground">Source comes from the payee or description.</p></div></div>
           {summary.incomeBySource.length ? <ul className="divide-y divide-border/70">
             {summary.incomeBySource.slice(0, 8).map((row, index) => <li key={row.id} className="flex items-center justify-between gap-3 py-3"><span className="flex min-w-0 items-center gap-2"><i className="size-2.5 rounded-full" style={{ background: CHART_COLORS[index % CHART_COLORS.length] }} /><span className="truncate text-sm">{row.name}</span></span><strong className="shrink-0 tabular-nums">{formatCents(row.amount)}</strong></li>)}
           </ul> : <EmptyChart>No income recorded in this period.</EmptyChart>}
         </Card>
-      </div>
+      </Tile>
 
-      <div className="grid gap-4 xl:grid-cols-2">
+      <Tile id="bucket-activity" label="Bucket activity" className="sm:col-span-full xl:col-span-3">
         <Card className="p-4 sm:p-5">
           <div className="mb-4"><h2 className="font-semibold">Bucket activity</h2><p className="mt-1 text-xs text-muted-foreground">Assignments, expenses, and internal bucket moves.</p></div>
           {summary.bucketActivity.length ? <div className="overflow-x-auto"><table className="w-full min-w-[30rem] text-sm">
@@ -243,20 +264,23 @@ export default function Analytics() {
             <tbody>{summary.bucketActivity.slice(0, 10).map((row) => <tr key={row.id} className="border-b border-border/50"><td className="max-w-40 truncate py-2.5 pr-2">{row.name}</td><td className="px-2 text-right tabular-nums">{formatCents(row.allocated)}</td><td className="px-2 text-right tabular-nums">{formatCents(row.spent)}</td><td className="px-2 text-right tabular-nums">{formatCents(row.movedIn)}</td><td className="pl-2 text-right tabular-nums">{formatCents(row.movedOut)}</td></tr>)}</tbody>
           </table></div> : <EmptyChart>No bucket activity in this period.</EmptyChart>}
         </Card>
-
+      </Tile>
+      <Tile id="period-transactions" label="Period transactions" className="sm:col-span-full xl:col-span-3">
         <Card className="p-4 sm:p-5">
           <div className="mb-4"><h2 className="font-semibold">Period transactions</h2><p className="mt-1 text-xs text-muted-foreground">Income, expenses, moves, assignments, and adjustments.</p></div>
           {summary.periodEvents.length ? <ul className="divide-y divide-border/70">
             {summary.periodEvents.slice(0, 10).map((event) => <li key={event.id} className="flex items-center justify-between gap-3 py-2.5"><span className="min-w-0"><strong className="block truncate text-sm">{event.description || event.type.replace('_', ' ')}</strong><span className="text-xs text-muted-foreground">{event.date} · {event.type.replace('_', ' ')}</span></span><strong className="shrink-0 tabular-nums">{formatCents(event.amountCents)}</strong></li>)}
           </ul> : <EmptyChart>No transactions in this period.</EmptyChart>}
         </Card>
-      </div>
+      </Tile>
 
+      <Tile id="money-flow" label="Money flow" className="col-span-full">
       <Card className="p-4 sm:p-5">
         <div className="mb-2 flex items-center gap-2"><BarChart3 className="size-4 text-primary" /><div><h2 className="font-semibold">Money flow</h2><p className="text-xs text-muted-foreground">Review the full plan, or choose a group to inspect its buckets and top payees.</p></div></div>
         <SankeyChart events={events} buckets={buckets} groups={groups} startDate={summary.startDate} endDate={summary.endDate} />
       </Card>
-    </div>
+      </Tile>
+    </TileBoard>
   )
 }
 

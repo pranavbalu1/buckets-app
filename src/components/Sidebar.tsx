@@ -5,6 +5,7 @@ import {
   Settings2,
   LayoutDashboard,
   LogOut,
+  Move,
   Plus,
   Search,
   Wallet,
@@ -31,12 +32,16 @@ export default function Sidebar({
   tab,
   onNavigate,
   onAdd,
+  moveMode,
+  onToggleMoveMode,
   onOpenCommandMenu,
   onLogout,
 }: {
   tab: Tab
   onNavigate: (tab: Tab) => void
   onAdd: () => void
+  moveMode: boolean
+  onToggleMoveMode: () => void
   onOpenCommandMenu: () => void
   onLogout: () => void
 }) {
@@ -79,6 +84,15 @@ export default function Sidebar({
         >
           <span className="flex items-center gap-2"><Search className="size-4" /> Search pages and actions</span>
           <kbd className="rounded-md border border-line bg-sunken px-1.5 py-0.5 text-[10px] font-medium">Ctrl K</kbd>
+        </button>
+        <button
+          type="button"
+          onClick={onToggleMoveMode}
+          aria-pressed={moveMode}
+          className={`flex w-full items-center justify-between rounded-xl border px-3.5 py-2.5 text-sm transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${moveMode ? 'border-accent/40 bg-accent text-accent-ink' : 'border-line bg-surface text-muted hover:bg-sunken hover:text-ink'}`}
+        >
+          <span className="flex items-center gap-2"><Move className="size-4" /> {moveMode ? 'Finish moving tiles' : 'Move tiles'}</span>
+          {moveMode && <span className="size-1.5 rounded-full bg-accent-ink" aria-hidden />}
         </button>
       </div>
 

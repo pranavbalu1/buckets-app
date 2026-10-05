@@ -25,15 +25,11 @@ export function isValidDate(value: string): boolean {
 }
 
 export function isValidMonth(value: string): boolean {
-  const match = /^(\d{4})-(\d{2})$/.exec(value)
-  if (!match) return false
-  const year = Number(match[1])
-  const month = Number(match[2])
-  return year >= 1 && month >= 1 && month <= 12
+  return isValidDate(value) && value.endsWith('-01')
 }
 
 export const dateSchema = z.string().refine(isValidDate, 'Enter a valid calendar date.')
-export const monthSchema = z.string().refine(isValidMonth, 'Enter a valid month.')
+export const monthSchema = z.string().refine(isValidMonth, 'Enter a valid budget month (use its first day).')
 export const entityNameSchema = z.string().trim().min(1, 'Enter a name.').max(100, 'Names must be 100 characters or fewer.')
 export const optionalDescriptionSchema = z.string().trim().max(240, 'Descriptions must be 240 characters or fewer.')
 export const payeeSchema = z.string().trim().max(120, 'Payees must be 120 characters or fewer.')
@@ -230,6 +226,11 @@ export const reconciliationInputSchema = z.object({
 
 export function firstIssueMessage(error: z.ZodError, fallback = 'Check the entered values and try again.'): string {
   return error.issues[0]?.message ?? fallback
+}
+
+export function userFacingErrorMessage(error: unknown, fallback = 'Something went wrong.'): string {
+  if (error instanceof z.ZodError) return firstIssueMessage(error, fallback)
+  return error instanceof Error ? error.message : fallback
 }
 
 /** Mirrors transaction field and shape constraints enforced by the database. */

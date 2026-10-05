@@ -4,6 +4,7 @@ import { Check, ChevronDown, GripVertical, Plus, Sparkles, Users } from 'lucide-
 import { Modal } from '../components/ui/modal'
 import { Button } from '../components/ui/button'
 import { Card } from '../components/ui/card'
+import { Tile, TileBoard } from '../components/TileLayout'
 import { List } from '../components/ui/list'
 import type { ListItemData } from '../components/ui/list'
 import { Skeleton } from '../components/ui/skeleton'
@@ -203,6 +204,8 @@ export default function Budget() {
 
   return (
     <div className="space-y-3">
+      <TileBoard page="budget" className="grid grid-cols-1 gap-3">
+      <Tile id="budget-summary" label="Budget totals">
       <Card className="sticky top-2 z-10 flex flex-wrap items-center gap-x-6 gap-y-2 p-3 shadow-md backdrop-blur-xl">
         <Figure label="Rain · unassigned" cents={rain} big accent={rain >= 0} />
         <div className="flex items-center gap-3">
@@ -227,6 +230,10 @@ export default function Budget() {
         </div>
       </Card>
 
+      </Tile>
+
+      <Tile id="budget-actions" label="Budget actions and display options">
+      <div>
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="primary" onClick={() => setDialog({ kind: 'rain' })}><Sparkles className="size-4" /> Make it rain!</Button>
         <Button variant="secondary" onClick={() => setDialog({ kind: 'editor', target: { type: 'bucket' } })}><Plus className="size-4" /> New bucket</Button>
@@ -250,13 +257,17 @@ export default function Budget() {
         <GripVertical className="size-3.5 shrink-0" aria-hidden />
         Drag the handles to reorder. Drop on a bucket to place before or after it, or drop on a group to move to its end.
       </p>
+      </div>
+      </Tile>
 
       {sections.length === 0 && (
+        <Tile id="budget-empty" label="No budget groups">
         <p className="py-8 text-center text-muted">
           {archivedCount > 0
             ? 'All buckets are archived. Turn on “Show archived buckets” above to view them.'
             : 'No buckets yet. Create a group, then add buckets to it.'}
         </p>
+        </Tile>
       )}
 
       {sections.map((section) => {
@@ -274,6 +285,7 @@ export default function Budget() {
         }))
 
         return (
+          <Tile key={section.key} id={`group-${section.key}`} label={`${section.title} group`}>
           <List
             key={section.key}
             aria-label={section.title + ' budget'}
@@ -507,8 +519,10 @@ export default function Budget() {
               )
             }}
           />
+          </Tile>
         )
       })}
+      </TileBoard>
       {dialog?.kind === 'rain' && <RainDialog month={month} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'editor' && (
         <div className="card p-4">

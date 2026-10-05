@@ -13,6 +13,7 @@ import {
 import QuickAdd from './QuickAdd'
 import { Button } from '../components/ui/button'
 import { Card } from '../components/ui/card'
+import { Tile, TileBoard } from '../components/TileLayout'
 import { FormField } from '../components/ui/form-field'
 import { Input } from '../components/ui/input'
 import { Modal } from '../components/ui/modal'
@@ -144,7 +145,8 @@ export default function Accounts() {
 
   return (
     <div className="space-y-5 md:space-y-6">
-      <div className="grid gap-4 xl:grid-cols-[0.85fr_1.15fr]">
+      <TileBoard page="accounts" className="grid grid-cols-1 gap-4 xl:grid-cols-5">
+      <Tile id="account-total" label="Account totals" className="xl:col-span-2">
         <Card className="relative flex min-h-48 flex-col justify-between overflow-hidden border-border bg-gradient-to-br from-surface via-accent-soft/60 to-info/10 p-5 text-foreground shadow-md sm:p-6">
           <div className="absolute -right-10 -top-16 size-52 rounded-full border-[30px] border-accent/10" aria-hidden />
           <div className="relative flex items-start justify-between">
@@ -164,7 +166,9 @@ export default function Accounts() {
             </Button>
           </div>
         </Card>
+      </Tile>
 
+      <Tile id="new-account" label="Add an account" className="xl:col-span-3">
         <Card className="p-5 sm:p-6">
           <div className="mb-4">
             <p className="text-xs font-semibold tracking-[0.13em] text-accent uppercase">Get started</p>
@@ -219,8 +223,9 @@ export default function Accounts() {
             </div>
           )}
         </Card>
-      </div>
+      </Tile>
 
+      <Tile id="account-list" label="Your accounts" className="col-span-full">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-semibold">Your accounts</h2>
@@ -253,6 +258,8 @@ export default function Accounts() {
           ))}
         </ul>
       )}
+      </Tile>
+      </TileBoard>
 
       {depositOpen && (
         <Modal title="Record a deposit" onClose={() => setDepositOpen(false)}>

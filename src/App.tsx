@@ -8,6 +8,7 @@ import {
   BarChart3,
   CircleDollarSign,
   LayoutDashboard,
+  Move,
   Moon,
   Plus,
   Settings2,
@@ -21,6 +22,8 @@ import { useLedger } from './storage/store'
 import type { AddKind, Tab } from './nav'
 import Modal from './components/Modal'
 import RouteErrorBoundary from './components/RouteErrorBoundary'
+import { PageSkeleton } from './components/PageSkeleton'
+import type { SkeletonPage } from './components/PageSkeleton'
 import Sidebar from './components/Sidebar'
 import { Button } from './components/ui/button'
 import { Card } from './components/ui/card'
@@ -31,6 +34,8 @@ import { queryClient } from './lib/queryClient'
 import { applyTheme, readThemePreference, saveThemePreference } from './lib/theme'
 import type { ThemePreference } from './lib/theme'
 import { supabaseRepository } from './storage/supabaseRepository'
+import { userFacingErrorMessage } from './domain/validate'
+import { TileLayoutProvider } from './components/TileLayout'
 
 const Login = lazy(() => import('./features/Login'))
 const Dashboard = lazy(() => import('./features/Dashboard'))
@@ -131,19 +136,14 @@ export default function App() {
     if (ledgerQuery.isPending) {
       useLedger.setState({ status: 'loading', error: null })
     } else if (ledgerQuery.error) {
-      useLedger.setState({ status: 'error', error: ledgerQuery.error.message })
+      useLedger.setState({ status: 'error', error: userFacingErrorMessage(ledgerQuery.error) })
     } else if (ledgerQuery.data) {
       useLedger.setState({ ...ledgerQuery.data, status: 'ready', error: null })
     }
   }, [authReady, userId, ledgerQuery.isPending, ledgerQuery.error, ledgerQuery.data, reset])
 
   if (!authReady && hasSupabaseConfig) return (
-    <main className="grid min-h-screen place-items-center bg-canvas p-4">
-      <Card className="flex w-full max-w-sm items-center gap-3 p-5 text-sm text-muted" role="status" aria-live="polite">
-        <span className="size-4 animate-spin rounded-full border-2 border-accent/25 border-t-accent" aria-hidden />
-        Restoring your session...
-      </Card>
-    </main>
+    <PageSkeleton page="Login" fullPage />
   )
 
   return (
@@ -151,7 +151,7 @@ export default function App() {
       {/* Diagnostics have no workflow link; in production the route is disabled. */}
       <Route
         path="/devtools"
-        element={<AsyncRoute>
+        element={<AsyncRoute page="DevTools">
           {import.meta.env.DEV
             ? <DevTools userId={session?.user.id} email={session?.user.email} />
             : <Navigate to={session ? '/dashboard' : '/'} replace />}
@@ -170,16 +170,16 @@ export default function App() {
           />
         }>
           <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<AsyncRoute><DashboardRoute /></AsyncRoute>} />
+          <Route path="dashboard" element={<AsyncRoute page="Dashboard"><DashboardRoute /></AsyncRoute>} />
           <Route path="budget" element={<Budget />} />
-          <Route path="transactions" element={<AsyncRoute><Transactions /></AsyncRoute>} />
-          <Route path="accounts" element={<AsyncRoute><Accounts /></AsyncRoute>} />
-          <Route path="analytics" element={<AsyncRoute><Analytics /></AsyncRoute>} />
-          <Route path="settings" element={<AsyncRoute><SettingsRoute /></AsyncRoute>} />
+          <Route path="transactions" element={<AsyncRoute page="Transactions"><Transactions /></AsyncRoute>} />
+          <Route path="accounts" element={<AsyncRoute page="Accounts"><Accounts /></AsyncRoute>} />
+          <Route path="analytics" element={<AsyncRoute page="Analytics"><Analytics /></AsyncRoute>} />
+          <Route path="settings" element={<AsyncRoute page="Settings"><SettingsRoute /></AsyncRoute>} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       ) : (
-        <Route path="*" element={<AsyncRoute><Login key={authError} initialError={authError} /></AsyncRoute>} />
+        <Route path="*" element={<AsyncRoute page="Login"><Login key={authError} initialError={authError} /></AsyncRoute>} />
       )}
     </Routes>
   )
@@ -206,6 +206,7 @@ function WorkspaceLayout({
   const navigate = useNavigate()
   const [addKind, setAddKind] = useState<AddKind | null>(null)
   const [commandOpen, setCommandOpen] = useState(false)
+  const [moveMode, setMoveMode] = useState(false)
   const tab = pathTabs[location.pathname.replace(/\/$/, '')] ?? 'Dashboard'
   const navigateTab = useCallback((nextTab: Tab) => {
     navigate(tabPaths[nextTab])
@@ -248,7 +249,15 @@ function WorkspaceLayout({
       icon: theme === 'dark' ? <Sun className="size-4" /> : <Moon className="size-4" />,
       onSelect: () => onThemeChange(theme === 'dark' ? 'light' : 'dark'),
     },
-  ], [navigateTab, theme, onThemeChange])
+    {
+      id: 'toggle-move-mode',
+      title: moveMode ? 'Finish moving tiles' : 'Move tiles',
+      subtitle: 'Rearrange page cards and save their order',
+      category: 'Preferences',
+      icon: <Move className="size-4" />,
+      onSelect: () => setMoveMode((enabled) => !enabled),
+    },
+  ], [navigateTab, theme, onThemeChange, moveMode])
 
   // The command menu owns Cmd/Ctrl+K; keep the single-key add shortcut out of editable fields.
   useEffect(() => {
@@ -273,12 +282,20 @@ function WorkspaceLayout({
           tab={tab}
           onNavigate={navigateTab}
           onAdd={() => setAddKind('expense')}
+          moveMode={moveMode}
+          onToggleMoveMode={() => setMoveMode((enabled) => !enabled)}
           onOpenCommandMenu={() => setCommandOpen(true)}
           onLogout={() => void supabase.auth.signOut()}
         />
 
         <main className="min-w-0 flex-1 px-4 pb-8 pt-5 md:px-8 md:py-8 xl:px-10">
           <div className="mx-auto max-w-[1440px]">
+            {moveMode && (
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-accent/35 bg-accent/5 px-3.5 py-2.5 text-sm" role="status">
+                <p><strong className="text-accent">Move mode is on.</strong> Drag a tile by its handle or use the arrow controls. Your layout saves automatically.</p>
+                <Button size="sm" variant="secondary" onClick={() => setMoveMode(false)}>Done</Button>
+              </div>
+            )}
             {tab !== 'Dashboard' && (
               <div className={`mb-6 flex flex-wrap items-end justify-between gap-4 md:mb-8 ${tab === 'Budget' ? 'mb-4 md:mb-5' : ''}`}>
                 <div>
@@ -294,7 +311,7 @@ function WorkspaceLayout({
               </div>
             )}
 
-            {error && (
+            {error && status !== 'error' && (
               <div role="alert" className="mb-5 flex items-center justify-between gap-4 rounded-xl border border-bad/30 bg-bad-soft p-3.5 text-sm text-bad">
                 <span>{error}</span>
                 <button className="shrink-0 underline underline-offset-2" onClick={onClearError}>Dismiss</button>
@@ -302,12 +319,7 @@ function WorkspaceLayout({
             )}
 
             {status === 'loading' && (
-              tab === 'Budget' ? <BudgetSkeleton /> : (
-                <Card className="flex min-h-48 items-center justify-center gap-3 p-8 text-sm text-muted">
-                  <span className="size-4 animate-spin rounded-full border-2 border-accent/25 border-t-accent" aria-hidden />
-                  Loading your money plan...
-                </Card>
-              )
+              tab === 'Budget' ? <BudgetSkeleton /> : <PageSkeleton page={tab} />
             )}
             {status === 'error' && (
               <Card className="flex flex-col items-start gap-3 border-destructive/25 p-5" role="alert">
@@ -318,7 +330,11 @@ function WorkspaceLayout({
                 <Button variant="primary" onClick={onRetry}>Try again</Button>
               </Card>
             )}
-            {status === 'ready' && <Outlet />}
+            {status === 'ready' && (
+              <TileLayoutProvider key={session.user.id} userId={session.user.id} moveMode={moveMode}>
+                <Outlet />
+              </TileLayoutProvider>
+            )}
           </div>
         </main>
 
@@ -342,12 +358,12 @@ function DashboardRoute() {
   return <Dashboard onAdd={setAddKind} onNavigate={navigateTab} />
 }
 
-function RouteLoading() {
-  return <Card className="grid min-h-48 place-items-center p-6 text-sm text-muted" role="status" aria-live="polite">Opening page...</Card>
+function RouteLoading({ page }: { page: SkeletonPage }) {
+  return <PageSkeleton page={page} />
 }
 
-function AsyncRoute({ children }: { children: ReactNode }) {
-  return <RouteErrorBoundary><Suspense fallback={<RouteLoading />}>{children}</Suspense></RouteErrorBoundary>
+function AsyncRoute({ page, children }: { page: SkeletonPage; children: ReactNode }) {
+  return <RouteErrorBoundary><Suspense fallback={<RouteLoading page={page} />}>{children}</Suspense></RouteErrorBoundary>
 }
 
 function SettingsRoute() {

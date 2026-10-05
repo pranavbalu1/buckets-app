@@ -13,6 +13,7 @@ interface FlowNode extends SankeyExtraProperties { id: string; label: string; co
 interface FlowLink extends SankeyExtraProperties { source: string; target: string; value: number }
 type LayoutNode = SankeyNode<FlowNode, FlowLink>
 type LayoutLink = SankeyLink<FlowNode, FlowLink>
+type HoverTarget = { kind: 'node'; nodeId: string } | { kind: 'link'; index: number }
 
 const PALETTE = [
   'var(--color-chart-1)', 'var(--color-chart-2)', 'var(--color-chart-3)',
@@ -30,9 +31,11 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
   const cursorFrame = useRef<number | null>(null)
   const pendingCursor = useRef<{ x: number; y: number } | null>(null)
   const [hovered, setHovered] = useState<{ label: string; value: number; color: string } | null>(null)
+  const [hoverTarget, setHoverTarget] = useState<HoverTarget | null>(null)
   const [cursorPos, setCursorPos] = useState<{ x: number; y: number } | null>(null)
   const [selectedGroupId, setSelectedGroupId] = useState('all')
   const [showMerchants, setShowMerchants] = useState(false)
+  const [highlightPaths, setHighlightPaths] = useState(true)
   useEffect(() => () => {
     if (cursorFrame.current !== null) window.cancelAnimationFrame(cursorFrame.current)
   }, [])
@@ -53,6 +56,7 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
     cursorFrame.current = null
     pendingCursor.current = null
     setHovered(null)
+    setHoverTarget(null)
     setCursorPos(null)
   }
   const groupOptions = [
@@ -76,7 +80,6 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
     const beforeEvents = events.filter((event) => effectiveDate(event) < startDate)
     const endBalances = computeBalances(events, endDate)
     const opening = computeBalances(beforeEvents)
-    const bucketById = new Map(buckets.map((bucket) => [bucket.id, bucket]))
     const groupById = new Map(groups.map((group) => [group.id, group]))
     const nodes = new Map<string, FlowNode>()
     const links: FlowLink[] = []
@@ -106,11 +109,8 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
         .sort((a, b) => b[1] - a[1])
         .slice(0, 5)
         .map(([name]) => name))
-      const merchantTotals = new Map<string, number>()
-      let otherMerchantTotal = 0
+      const merchantColors = new Map<string, string>()
       const groupActivity = ensure('group-activity', `${groupLabel} activity`, groupColor)
-      const spentNode = ensure('period-spending', 'Spending', 'var(--color-chart-4)')
-      const unspentNode = ensure('unspent', 'Unspent balance', 'var(--color-chart-3)')
 
       for (const bucket of focusedBuckets) {
         const bucketEvents = focusedEvents.filter((event) => event.bucketId === bucket.id)
@@ -122,10 +122,8 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
 
         const bucketNode = ensure(`bucket:${bucket.id}`, bucket.name, bucket.color ?? PALETTE[3])
         addLink(groupActivity, bucketNode, resource)
-        addLink(bucketNode, unspentNode, unspent)
 
         if (!showMerchants) {
-          addLink(bucketNode, spentNode, spent)
           continue
         }
 
@@ -136,17 +134,13 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
         }
         for (const [name, amount] of bucketPayees) {
           if (topPayees.has(name)) {
-            addLink(bucketNode, ensure(`payee:${name}`, name, PALETTE[merchantTotals.size % PALETTE.length]), amount)
-            merchantTotals.set(name, (merchantTotals.get(name) ?? 0) + amount)
+            if (!merchantColors.has(name)) merchantColors.set(name, PALETTE[merchantColors.size % PALETTE.length])
+            addLink(bucketNode, ensure(`payee:${name}`, name, merchantColors.get(name)!), amount)
           } else {
             addLink(bucketNode, ensure('other-payees', 'Other payees', '#64748b'), amount)
-            otherMerchantTotal += amount
           }
         }
       }
-
-      for (const [name, amount] of merchantTotals) addLink(ensure(`payee:${name}`, name, PALETTE[0]), spentNode, amount)
-      if (otherMerchantTotal > 0) addLink(ensure('other-payees', 'Other payees', '#64748b'), spentNode, otherMerchantTotal)
 
       const valid = [...links.reduce((set, link) => set.add(link.source).add(link.target), new Set<string>())]
       const graphNodes = [...nodes.values()].filter((node) => valid.includes(node.id))
@@ -174,11 +168,7 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
     const adjustmentIn = periodEvents
       .filter((event) => event.type === 'adjustment' && event.direction === 'in')
       .reduce((total, event) => total + event.amountCents, 0)
-    const adjustmentOut = periodEvents
-      .filter((event) => event.type === 'adjustment' && event.direction === 'out')
-      .reduce((total, event) => total + event.amountCents, 0)
     if (adjustmentIn > 0) addLink(ensure('adjustments-in', 'Account adjustments', '#64748b'), available, adjustmentIn)
-    if (adjustmentOut > 0) addLink(available, ensure('adjustments-out', 'Account adjustments', '#64748b'), adjustmentOut)
     addLink(ensure('opening-rain', 'Starting available', '#64748b'), available, Math.max(0, opening.unallocated))
 
     const allocatedByBucket = new Map<string, number>()
@@ -186,74 +176,67 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
       if (event.type !== 'allocation' || !event.bucketId) continue
       allocatedByBucket.set(event.bucketId, (allocatedByBucket.get(event.bucketId) ?? 0) + (event.direction === 'out' ? -event.amountCents : event.amountCents))
     }
-    const allocatedByGroup = new Map<string, number>()
-    for (const [bucketId, amount] of allocatedByBucket) {
-      if (amount <= 0) continue
-      const bucket = bucketById.get(bucketId)
-      const groupId = bucket?.groupId ?? 'ungrouped'
-      allocatedByGroup.set(groupId, (allocatedByGroup.get(groupId) ?? 0) + amount)
+    const bucketFlows = new Map<string, number>()
+    const groupFlows = new Map<string, number>()
+    let startingBucketBalances = 0
+    let unfundedBucketActivity = 0
+
+    for (const bucket of buckets) {
+      const allocated = Math.max(0, allocatedByBucket.get(bucket.id) ?? 0)
+      const openingBalance = Math.max(0, opening.buckets[bucket.id] ?? 0)
+      const knownFunding = allocated + openingBalance
+      const expenses = periodEvents
+        .filter((event) => event.type === 'expense' && event.bucketId === bucket.id)
+        .reduce((total, event) => total + event.amountCents, 0)
+      const closingBalance = endBalances.buckets[bucket.id] ?? 0
+      const observedActivity = expenses + Math.max(0, closingBalance)
+      const flow = Math.max(knownFunding, observedActivity)
+      if (flow <= 0) continue
+
+      const groupId = bucket.groupId ?? 'ungrouped'
+      bucketFlows.set(bucket.id, flow)
+      groupFlows.set(groupId, (groupFlows.get(groupId) ?? 0) + flow)
+      startingBucketBalances += openingBalance
+      unfundedBucketActivity += Math.max(0, flow - knownFunding)
     }
-    for (const [groupId, amount] of allocatedByGroup) {
+
+    if (startingBucketBalances > 0) {
+      addLink(ensure('starting-buckets', 'Starting bucket balances', '#64748b'), available, startingBucketBalances)
+    }
+    if (unfundedBucketActivity > 0) {
+      addLink(ensure('reconcile-in-bucket', 'Other bucket activity', '#f43f5e'), available, unfundedBucketActivity)
+    }
+
+    for (const [groupId, amount] of groupFlows) {
       const label = groupId === 'ungrouped' ? 'Ungrouped buckets' : groupById.get(groupId)?.name ?? 'Other group'
       const groupNode = ensure(`group:${groupId}`, label, PALETTE[2])
       addLink(available, groupNode, amount)
     }
 
     for (const bucket of buckets) {
-      const netAllocated = Math.max(0, allocatedByBucket.get(bucket.id) ?? 0)
-      const openingAmount = Math.max(0, opening.buckets[bucket.id] ?? 0)
-      const amount = netAllocated + openingAmount
-      const bucketExpenses = periodEvents
-        .filter((event) => event.type === 'expense' && event.bucketId === bucket.id)
-        .reduce((total, event) => total + event.amountCents, 0)
-      if (amount <= 0 && bucketExpenses <= 0) continue
+      const amount = bucketFlows.get(bucket.id) ?? 0
+      if (amount <= 0) continue
       const groupId = bucket.groupId ?? 'ungrouped'
       const label = groupId === 'ungrouped' ? 'Ungrouped buckets' : groupById.get(groupId)?.name ?? 'Other group'
       const groupNode = ensure(`group:${groupId}`, label, PALETTE[2])
-      if (openingAmount > 0) addLink(ensure('starting-buckets', 'Starting bucket balances', '#64748b'), groupNode, openingAmount)
       const bucketNode = ensure(`bucket:${bucket.id}`, bucket.name, bucket.color ?? PALETTE[3])
       addLink(groupNode, bucketNode, amount)
-      if (bucketExpenses > 0) addLink(bucketNode, ensure('period-spending', 'Spending', 'var(--color-chart-4)'), bucketExpenses)
-      const closingBalance = endBalances.buckets[bucket.id] ?? 0
-      addLink(bucketNode, ensure('unspent', 'Unspent balance', 'var(--color-chart-3)'), Math.max(0, closingBalance))
     }
 
-    addLink(available, ensure('unallocated', 'Unallocated', 'var(--color-chart-2)'), Math.max(0, endBalances.unallocated))
-    addLink(ensure('available-shortfall', 'Available money shortfall', '#f43f5e'), ensure('unallocated-shortfall', 'Unallocated shortfall', '#fb7185'), Math.max(0, -endBalances.unallocated))
-
-    // Balance only flow-through nodes. Sources and destinations are real endpoints,
-    // so giving each one a placeholder edge creates duplicate, misleading labels.
-    const incoming = new Map<string, number>()
-    const outgoing = new Map<string, number>()
-    for (const link of links) {
-      outgoing.set(link.source, (outgoing.get(link.source) ?? 0) + link.value)
-      incoming.set(link.target, (incoming.get(link.target) ?? 0) + link.value)
+    const closingAvailableBalance = endBalances.unallocated
+    if (closingAvailableBalance > 0) {
+      addLink(available, ensure('available-balance', 'Available balance', PALETTE[1]), closingAvailableBalance)
     }
-    for (const node of [...nodes.values()]) {
-      const isFlowNode = node.id === 'available' || node.id.startsWith('group:') || node.id.startsWith('bucket:')
-      if (!isFlowNode) continue
-      const inValue = incoming.get(node.id) ?? 0
-      const outValue = outgoing.get(node.id) ?? 0
-      const difference = Math.abs(inValue - outValue)
-      if (difference < 1) continue
-      const kind = node.id === 'available' ? 'available' : node.id.startsWith('group:') ? 'group' : 'bucket'
-      if (outValue > inValue) {
-        const sources = {
-          available: ['reconcile-in-available', 'Other available funds', '#64748b'],
-          group: ['reconcile-in-group', 'Other group funding', '#64748b'],
-          bucket: ['reconcile-in-bucket', 'Unfunded bucket activity', '#f43f5e'],
-        } as const
-        const [id, label, color] = sources[kind]
-        addLink(ensure(id, label, color), node.id, difference)
-      } else {
-        const destinations = {
-          available: ['reconcile-out-available', 'Other uses of available money'],
-          group: ['reconcile-out-group', 'Returns and internal moves'],
-          bucket: ['reconcile-out-bucket', 'Returns and transfers'],
-        } as const
-        const [id, label] = destinations[kind]
-        addLink(node.id, ensure(id, label, '#64748b'), difference)
-      }
+
+    const availableInflow = links
+      .filter((link) => link.target === available)
+      .reduce((total, link) => total + link.value, 0)
+    const availableOutflow = links
+      .filter((link) => link.source === available)
+      .reduce((total, link) => total + link.value, 0)
+    const availableDeficit = Math.max(0, -closingAvailableBalance, availableOutflow - availableInflow)
+    if (availableDeficit > 0) {
+      addLink(ensure('available-deficit', 'Deficit', '#f43f5e'), available, availableDeficit)
     }
 
     const valid = [...links.reduce((set, link) => set.add(link.source).add(link.target), new Set<string>())]
@@ -269,9 +252,73 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
     return { layout, layoutHeight }
   }, [events, buckets, groups, startDate, endDate, activeGroupId, showMerchants])
 
-  if (!graph) return <div className="grid h-52 place-items-center text-sm text-muted">No money flows to show for this period.</div>
+  const layout = graph?.layout ?? null
+  const layoutHeight = graph?.layoutHeight ?? 320
+  const highlighted = useMemo(() => {
+    if (!layout || !hoverTarget || !highlightPaths) return null
+
+    const incomingLinks = new Map<string, number[]>()
+    const outgoingLinks = new Map<string, number[]>()
+    const indexLink = (map: Map<string, number[]>, nodeId: string, index: number) => {
+      const indexes = map.get(nodeId)
+      if (indexes) indexes.push(index)
+      else map.set(nodeId, [index])
+    }
+    layout.links.forEach((link, index) => {
+      const typed = link as LayoutLink
+      const source = typed.source as LayoutNode
+      const target = typed.target as LayoutNode
+      indexLink(incomingLinks, target.id, index)
+      indexLink(outgoingLinks, source.id, index)
+    })
+
+    const linkIndexes = new Set<number>()
+    const nodeIds = new Set<string>()
+    const trace = (startId: string, adjacent: Map<string, number[]>, nextNodeId: (link: LayoutLink) => string) => {
+      const visited = new Set([startId])
+      const pending = [startId]
+      nodeIds.add(startId)
+      while (pending.length) {
+        const currentId = pending.pop()!
+        for (const index of adjacent.get(currentId) ?? []) {
+          const link = layout.links[index] as LayoutLink
+          linkIndexes.add(index)
+          const nextId = nextNodeId(link)
+          nodeIds.add(nextId)
+          if (!visited.has(nextId)) {
+            visited.add(nextId)
+            pending.push(nextId)
+          }
+        }
+      }
+    }
+    const sourceId = (link: LayoutLink) => (link.source as LayoutNode).id
+    const targetId = (link: LayoutLink) => (link.target as LayoutNode).id
+
+    if (hoverTarget.kind === 'node') {
+      trace(hoverTarget.nodeId, incomingLinks, sourceId)
+      trace(hoverTarget.nodeId, outgoingLinks, targetId)
+    } else {
+      const selectedLink = layout.links[hoverTarget.index] as LayoutLink | undefined
+      if (!selectedLink) return null
+      const source = sourceId(selectedLink)
+      const target = targetId(selectedLink)
+      linkIndexes.add(hoverTarget.index)
+      nodeIds.add(source)
+      nodeIds.add(target)
+      trace(source, incomingLinks, sourceId)
+      trace(target, outgoingLinks, targetId)
+    }
+
+    return { linkIndexes, nodeIds }
+  }, [layout, hoverTarget, highlightPaths])
+  const linkEntries = layout?.links.map((link, index) => {
+    const typed = link as LayoutLink
+    return { typed, index, source: typed.source as LayoutNode, target: typed.target as LayoutNode }
+  }).sort((a, b) => Number(highlighted?.linkIndexes.has(a.index) ?? false) - Number(highlighted?.linkIndexes.has(b.index) ?? false)) ?? []
+
+  if (!graph || !layout) return <div className="grid h-52 place-items-center text-sm text-muted">No money flows to show for this period.</div>
   const path = sankeyLinkHorizontal<FlowNode, FlowLink>()
-  const { layout, layoutHeight } = graph
 
   return (
     <div ref={containerRef} className="relative">
@@ -293,6 +340,18 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
             className="h-9"
           />
         </label>
+        <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border/70 bg-card px-3 py-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            className="accent-primary"
+            checked={highlightPaths}
+            onChange={(event) => {
+              setHighlightPaths(event.target.checked)
+              if (!event.target.checked) setHoverTarget(null)
+            }}
+          />
+          Highlight related paths
+        </label>
         {activeGroupId !== 'all' && (
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-border/70 bg-card px-3 py-2 text-xs text-muted-foreground">
             <input
@@ -310,13 +369,14 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
         onMouseMove={updateCursor}
         onMouseLeave={clearCursor}
       >
-        <svg viewBox={`0 0 960 ${layoutHeight + 42}`} role="img" aria-label="Sankey diagram of income, bucket funding, spending, and unspent money" className="h-auto min-w-[760px] w-full">
+        <svg viewBox={`0 0 960 ${layoutHeight + 42}`} role="img" aria-label="Sankey diagram of income and starting balances flowing through available money and groups into buckets" className="h-auto min-w-[760px] w-full">
           <g fill="none">
-            {layout.links.map((link, index) => {
-              const typed = link as LayoutLink
-              const source = typed.source as LayoutNode
-              const target = typed.target as LayoutNode
-              return <path key={`${source.id}-${index}`} d={path(typed) ?? ''} stroke={source.color} strokeOpacity={0.3} strokeWidth={Math.max(1, typed.width ?? 1)} className="cursor-pointer transition-[stroke-opacity] hover:stroke-opacity-80" onMouseEnter={() => setHovered({ label: `${source.label} → ${target.label}`, value: typed.value, color: source.color })}>
+            {linkEntries.map(({ typed, index, source, target }) => {
+              const isHighlighted = highlighted?.linkIndexes.has(index) ?? false
+              return <path key={`${source.id}-${target.id}-${index}`} d={path(typed) ?? ''} stroke={source.color} strokeOpacity={highlighted ? isHighlighted ? 0.9 : 0.035 : 0.3} strokeWidth={Math.max(1, typed.width ?? 1) + (highlighted && isHighlighted ? 1.5 : 0)} className="cursor-pointer transition-[stroke-opacity,stroke-width] duration-150" onMouseEnter={() => {
+                setHoverTarget({ kind: 'link', index })
+                setHovered({ label: `${source.label} → ${target.label}`, value: typed.value, color: source.color })
+              }}>
                 <title>{`${source.label} → ${target.label}: ${formatCents(typed.value)}`}</title>
               </path>
             })}
@@ -327,10 +387,15 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
               const x = typed.x0 ?? 0
               const y = typed.y0 ?? 0
               const rightSide = x > 700
+              const isHighlighted = highlighted?.nodeIds.has(typed.id) ?? false
+              const isHoveredNode = hoverTarget?.kind === 'node' && hoverTarget.nodeId === typed.id
               return (
-                <g key={typed.id}>
-                  <rect x={x} y={y} width={(typed.x1 ?? x + 14) - x} height={Math.max(1, (typed.y1 ?? y + 1) - y)} fill={typed.color} rx="3" className="cursor-pointer" onMouseEnter={() => setHovered({ label: typed.label, value: typed.value ?? 0, color: typed.color })} />
-                  <text x={rightSide ? x - 7 : (typed.x1 ?? x + 14) + 7} y={(typed.y0 ?? 0) + ((typed.y1 ?? 0) - (typed.y0 ?? 0)) / 2} textAnchor={rightSide ? 'end' : 'start'} dominantBaseline="middle" fill="currentColor" fontSize="11">
+                <g key={typed.id} className="cursor-pointer" opacity={highlighted && !isHighlighted ? 0.28 : 1} onMouseEnter={() => {
+                  setHoverTarget({ kind: 'node', nodeId: typed.id })
+                  setHovered({ label: typed.label, value: typed.value ?? 0, color: typed.color })
+                }}>
+                  <rect x={x} y={y} width={(typed.x1 ?? x + 14) - x} height={Math.max(1, (typed.y1 ?? y + 1) - y)} fill={typed.color} rx="3" stroke={isHoveredNode ? 'var(--color-ink)' : 'none'} strokeWidth={isHoveredNode ? 2 : 0} />
+                  <text x={rightSide ? x - 7 : (typed.x1 ?? x + 14) + 7} y={(typed.y0 ?? 0) + ((typed.y1 ?? 0) - (typed.y0 ?? 0)) / 2} textAnchor={rightSide ? 'end' : 'start'} dominantBaseline="middle" fill="currentColor" fontSize="11" fontWeight={isHoveredNode ? 700 : 400}>
                     {typed.label}
                   </text>
                 </g>
@@ -341,10 +406,10 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
         <div className="flex flex-wrap items-center justify-between gap-2 px-2 pt-2">
           <p className="max-w-3xl text-xs leading-5 text-muted">
             {activeGroupId === 'all'
-              ? 'Overview shows period income and starting balances through groups into bucket spending and closing balances. Choose a group to focus on its buckets.'
+              ? 'Income and starting balances pool in Available money, then flow through groups into buckets. Any remaining balance or deficit is shown at the pool.'
               : showMerchants
-                ? 'Group detail shows the five largest payees; remaining payees are combined. Flows summarize bucket activity and do not trace individual income dollars.'
-                : 'Group detail summarizes each bucket’s spending and closing balance. Flows do not trace individual income dollars.'}
+                ? 'Group detail traces each bucket’s spending to its five largest payees; remaining payees are combined.'
+                : 'Group detail shows how much money reaches each bucket in the selected group.'}
           </p>
           {overspentTotal > 0 && (
             <p className="rounded-full bg-bad-soft px-2.5 py-1 text-xs font-medium text-bad" role="status">

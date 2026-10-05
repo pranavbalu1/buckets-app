@@ -196,4 +196,31 @@
   .border-input {
     border-color: var(--color-line);
   }
+
+  .animate-shimmer {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+
+  .animate-shimmer::after {
+    position: absolute;
+    inset: 0;
+    content: '';
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-ink) 10%, transparent), transparent);
+    animation: skeleton-shimmer 1.7s ease-in-out infinite;
+    pointer-events: none;
+  }
+}
+
+@keyframes skeleton-shimmer {
+  to { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-shimmer::after {
+    animation: none;
+    transform: none;
+  }
 }

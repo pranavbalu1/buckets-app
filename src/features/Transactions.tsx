@@ -13,6 +13,7 @@ import {
 import type { LucideIcon } from 'lucide-react'
 import { Button } from '../components/ui/button'
 import { Card } from '../components/ui/card'
+import { Tile, TileBoard } from '../components/TileLayout'
 import { Input } from '../components/ui/input'
 import { Select } from '../components/ui/select'
 import { Modal } from '../components/ui/modal'
@@ -118,6 +119,8 @@ export default function Transactions() {
 
   return (
     <div className="space-y-5 md:space-y-6">
+      <TileBoard page="transactions" className="grid grid-cols-1 gap-5 md:gap-6">
+      <Tile id="filters" label="Transaction filters">
       <Card className="p-3.5 md:p-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           <div className="relative min-w-56 flex-1">
@@ -164,22 +167,28 @@ export default function Transactions() {
           {hasFilters && <button className="ml-auto font-medium text-primary hover:underline" onClick={clearFilters}>Clear filters</button>}
         </div>
       </Card>
+      </Tile>
 
       {events.length === 0 && (
+        <Tile id="empty-history" label="Empty transaction history">
         <Card className="flex flex-col items-center px-5 py-14 text-center">
           <span className="grid size-12 place-items-center rounded-2xl bg-accent-soft text-accent"><ReceiptText className="size-5" /></span>
           <h2 className="mt-4 font-semibold">Your transaction history starts here</h2>
           <p className="mt-1 max-w-sm text-sm text-muted">Once you record income, spending, or a transfer, it will appear here.</p>
         </Card>
+        </Tile>
       )}
       {events.length > 0 && filtered.length === 0 && (
+        <Tile id="empty-filter-results" label="No matching transactions">
         <Card className="px-5 py-12 text-center">
           <p className="font-medium">No transactions match those filters.</p>
           <p className="mt-1 text-sm text-muted">Try a different search or clear the current filters.</p>
         </Card>
+        </Tile>
       )}
 
       {byDate.map((group) => (
+        <Tile key={group.date} id={`date-${group.date}`} label={`Transactions ${dateLabel(group.date)}`}>
         <section key={group.date} className="space-y-2.5">
           <div className="flex items-center justify-between px-1">
             <h2 className="text-xs font-semibold tracking-wide text-muted uppercase">{dateLabel(group.date)}</h2>
@@ -229,7 +238,9 @@ export default function Transactions() {
             })}
           </Card>
         </section>
+        </Tile>
       ))}
+      </TileBoard>
 
       {editing && <Modal title="Edit transaction" onClose={() => setEditing(null)}>
         <QuickAdd key={editing.id} initialEvent={editing} onDone={() => setEditing(null)} />

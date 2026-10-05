@@ -17,6 +17,7 @@ import {
   groupInputSchema,
   groupPatchSchema,
   ledgerEventSchema,
+  userFacingErrorMessage,
 } from '../domain/validate'
 
 interface LedgerState {
@@ -59,7 +60,7 @@ interface LedgerState {
 
 const empty = { accounts: [], groups: [], buckets: [], events: [] }
 
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
+const message = (e: unknown) => userFacingErrorMessage(e)
 const byOrder = <T extends { sortOrder: number; name: string }>(a: T, b: T) =>
   a.sortOrder - b.sortOrder || a.name.localeCompare(b.name)
 const nextOrder = (items: { sortOrder: number }[]) => items.reduce((m, i) => Math.max(m, i.sortOrder), 0) + 1
