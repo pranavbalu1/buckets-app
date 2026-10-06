@@ -80,7 +80,7 @@ function BucketForm({ bucket, onClose }: { bucket?: Bucket; onClose: () => void 
   return (
     <Modal title={bucket ? 'Edit bucket' : 'New bucket'} onClose={onClose}>
       <form onSubmit={save} className="space-y-4">
-        <Field label="Name"><input className="input" required maxLength={100} autoFocus value={name} onChange={(e) => { setName(e.target.value); setError('') }} /></Field>
+        <Field label="Name"><input className="input" required maxLength={100} value={name} onChange={(e) => { setName(e.target.value); setError('') }} /></Field>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Group">
             <select className="input" value={groupId} onChange={(e) => setGroupId(e.target.value)}>
@@ -138,7 +138,7 @@ function GroupForm({ group, onClose }: { group?: BucketGroup; onClose: () => voi
   }
   return <Modal title={group ? 'Edit group' : 'New group'} onClose={onClose}>
     <form onSubmit={save} className="space-y-4">
-      <Field label="Group name"><input className="input" required maxLength={100} autoFocus value={name} onChange={(e) => { setName(e.target.value); setError('') }} /></Field>
+      <Field label="Group name"><input className="input" required maxLength={100} value={name} onChange={(e) => { setName(e.target.value); setError('') }} /></Field>
       <ColorPicker value={color} onChange={setColor} />
       {error && <p className="text-sm text-bad" role="alert">{error}</p>}
       <div className="flex gap-2"><button disabled={busy} className="btn btn-primary">{busy ? 'Saving…' : 'Save'}</button><button type="button" className="btn" onClick={onClose}>Cancel</button>{group && <button type="button" className="btn-link ml-auto text-bad" onClick={remove}>Delete group</button>}</div>

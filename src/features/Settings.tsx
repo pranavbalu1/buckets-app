@@ -518,7 +518,7 @@ export default function Settings({ userId, theme, onThemeChange }: {
       {applyTemplate && <Modal title={`Apply ${applyTemplate.name}`} onClose={() => setApplyTemplate(null)}>
         <form onSubmit={postPaycheck} className="space-y-4">
           <p className="text-sm text-muted-foreground">Records income in {accountName(applyTemplate.account_id)} and assigns the saved bucket amounts on the date below.</p>
-          <FormField label="Paycheck amount"><Input autoFocus inputMode="decimal" placeholder="0.00" value={applyAmount} onChange={(event) => setApplyAmount(event.target.value)} /></FormField>
+          <FormField label="Paycheck amount"><Input inputMode="decimal" placeholder="0.00" value={applyAmount} onChange={(event) => setApplyAmount(event.target.value)} /></FormField>
           <FormField label="Pay date"><Input type="date" value={applyDate} onChange={(event) => setApplyDate(event.target.value)} /></FormField>
           <ul className="rounded-xl border border-border/70 px-3 text-sm divide-y divide-border/60">
             {applyTemplate.allocations.map((item) => <li key={item.bucketId} className="flex justify-between gap-3 py-2"><span>{bucketName(item.bucketId)}</span><span className="tabular-nums">{formatCents(item.cents)}</span></li>)}

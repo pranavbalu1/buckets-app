@@ -163,7 +163,7 @@ export default function QuickAdd({
 
       <div className="grid gap-3 sm:grid-cols-2">
         <FormField label="Amount">
-          <Input inputMode="decimal" placeholder="0.00" autoFocus value={amount} aria-invalid={Boolean(error)} onChange={(e) => { setAmount(e.target.value); setError('') }} />
+          <Input inputMode="decimal" placeholder="0.00" value={amount} aria-invalid={Boolean(error)} onChange={(e) => { setAmount(e.target.value); setError('') }} />
         </FormField>
         <FormField label="Date">
           <Input type="date" required value={date} aria-invalid={Boolean(error)} onChange={(e) => { setDate(e.target.value); setError('') }} />

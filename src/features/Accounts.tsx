@@ -353,7 +353,7 @@ function AccountRow({ account, balance, canMoveUp, canMoveDown, onMoveUp, onMove
         <div className="col-start-2 row-start-1 min-w-0 sm:col-auto sm:row-auto sm:flex-1">
           {editing ? (
             <div className="space-y-1">
-              <Input aria-label="Rename account" autoFocus className="h-8 py-1" value={name}
+              <Input aria-label="Rename account" className="h-8 py-1" value={name}
               onChange={(event) => setName(event.target.value)}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') void save()
