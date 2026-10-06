@@ -137,7 +137,7 @@ export default function Transactions() {
                   key={value}
                   aria-pressed={selected}
                   onClick={() => setFilter(value)}
-                  className={`rounded-lg px-3 py-2 text-xs font-medium transition ${selected ? 'bg-accent text-accent-ink shadow-sm' : 'bg-sunken/70 text-muted hover:bg-sunken hover:text-ink'}`}
+                  className={`min-h-10 rounded-lg px-3 py-2 text-xs font-medium transition ${selected ? 'bg-accent text-accent-ink shadow-sm' : 'bg-sunken/70 text-muted hover:bg-sunken hover:text-ink'}`}
                 >
                   {value === 'all' ? 'All' : TYPE_LABELS[value]}
                 </button>
@@ -194,7 +194,7 @@ export default function Transactions() {
               const Icon = eventIcons[event.type]
               const effect = cashEffect(event)
               return (
-                <div key={event.id} className="group flex min-w-0 items-center gap-3 px-3 py-3 transition hover:bg-sunken/45 sm:gap-4 sm:px-4">
+                <div key={event.id} className="group flex min-w-0 flex-wrap items-center gap-3 px-3 py-3 transition hover:bg-sunken/45 sm:flex-nowrap sm:gap-4 sm:px-4">
                   <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${eventColors[event.type]}`}><Icon className="size-[18px]" /></span>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
@@ -208,12 +208,13 @@ export default function Transactions() {
                     <Money cents={effect ?? event.amountCents} className={effect !== null && effect > 0 ? 'font-semibold text-good' : 'font-medium'} />
                     <div className="mt-0.5 hidden text-[10px] text-muted sm:block">{formatCents(event.amountCents)} recorded</div>
                   </div>
+                  <div className="ml-auto flex w-full shrink-0 justify-end gap-1 sm:ml-0 sm:w-auto">
                   <Button
                     variant="ghost"
                     size="icon"
                     aria-label={`Edit ${TYPE_LABELS[event.type]} on ${event.date}`}
                     title="Edit transaction"
-                    className="size-8 shrink-0 rounded-lg opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                    className="size-10 shrink-0 rounded-lg opacity-100 sm:size-8 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                     onClick={() => setEditing(event)}
                   >
                     <Pencil className="size-3.5" />
@@ -223,11 +224,12 @@ export default function Transactions() {
                     size="icon"
                     aria-label={`Delete ${TYPE_LABELS[event.type]} on ${event.date}`}
                     title="Delete transaction"
-                    className="size-8 shrink-0 rounded-lg opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                    className="size-10 shrink-0 rounded-lg opacity-100 sm:size-8 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                     onClick={() => remove(event)}
                   >
                     <Trash2 className="size-3.5" />
                   </Button>
+                  </div>
                 </div>
               )
             })}

@@ -205,10 +205,10 @@ export function TileBoard({ page, className, children }: TileBoardProps) {
                     <span className="truncate">{tile.label}</span>
                   </button>
                   <span className="flex shrink-0 items-center gap-1">
-                    <button type="button" className="grid size-7 place-items-center rounded-md hover:bg-accent/15 disabled:opacity-35" aria-label={`Move ${tile.label} up`} disabled={index === 0} onClick={() => reorder(id, orderedIds[index - 1])}>
+                    <button type="button" className="grid size-10 touch-manipulation place-items-center rounded-md hover:bg-accent/15 disabled:opacity-35 sm:size-7" aria-label={`Move ${tile.label} up`} disabled={index === 0} onClick={() => reorder(id, orderedIds[index - 1])}>
                       <ArrowUp className="size-3.5" aria-hidden />
                     </button>
-                    <button type="button" className="grid size-7 place-items-center rounded-md hover:bg-accent/15 disabled:opacity-35" aria-label={`Move ${tile.label} down`} disabled={index === orderedIds.length - 1} onClick={() => reorder(id, orderedIds[index + 1])}>
+                    <button type="button" className="grid size-10 touch-manipulation place-items-center rounded-md hover:bg-accent/15 disabled:opacity-35 sm:size-7" aria-label={`Move ${tile.label} down`} disabled={index === orderedIds.length - 1} onClick={() => reorder(id, orderedIds[index + 1])}>
                       <ArrowDown className="size-3.5" aria-hidden />
                     </button>
                   </span>

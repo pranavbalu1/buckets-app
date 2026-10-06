@@ -379,16 +379,25 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
           </label>
         )}
       </div>
+      <p className="mb-2 text-xs text-muted-foreground sm:hidden">Swipe the chart sideways to inspect each stage.</p>
       <div
-        className="overflow-x-auto"
+        className="overflow-x-auto overscroll-x-contain touch-pan-x"
+        role="region"
+        aria-label="Scrollable money flow diagram"
+        tabIndex={0}
         onMouseMove={updateCursor}
         onMouseLeave={clearCursor}
       >
-        <svg viewBox={`0 0 960 ${layoutHeight + 42}`} role="img" aria-label="Sankey diagram of income and starting balances flowing through available money and groups into buckets" className="h-auto min-w-[760px] w-full">
+        <svg viewBox={`0 0 960 ${layoutHeight + 42}`} role="img" aria-label="Sankey diagram of income and starting balances flowing through available money and groups into buckets" className="h-auto min-w-[900px] w-full">
           <g fill="none">
             {linkEntries.map(({ typed, index, source, target }) => {
               const isHighlighted = highlighted?.linkIndexes.has(index) ?? false
-              return <path key={`${source.id}-${target.id}-${index}`} d={path(typed) ?? ''} stroke={source.color} strokeOpacity={highlighted ? isHighlighted ? 0.9 : 0.035 : 0.3} strokeWidth={Math.max(1, typed.width ?? 1) + (highlighted && isHighlighted ? 1.5 : 0)} className="cursor-pointer transition-[stroke-opacity,stroke-width] duration-150" onMouseEnter={() => {
+              return <path key={`${source.id}-${target.id}-${index}`} d={path(typed) ?? ''} stroke={source.color} strokeOpacity={highlighted ? isHighlighted ? 0.9 : 0.035 : 0.3} strokeWidth={Math.max(1, typed.width ?? 1) + (highlighted && isHighlighted ? 1.5 : 0)} className="cursor-pointer transition-[stroke-opacity,stroke-width] duration-150" onClick={(event) => {
+                setHoverTarget({ kind: 'link', index })
+                setHovered({ label: `${source.label} → ${target.label}`, value: typed.value, color: source.color })
+                const bounds = containerRef.current?.getBoundingClientRect()
+                if (bounds) setCursorPos({ x: Math.min(bounds.width - 150, Math.max(120, event.clientX - bounds.left)), y: Math.max(60, event.clientY - bounds.top) })
+              }} onMouseEnter={() => {
                 setHoverTarget({ kind: 'link', index })
                 setHovered({ label: `${source.label} → ${target.label}`, value: typed.value, color: source.color })
               }}>
@@ -405,7 +414,12 @@ export default function SankeyChart({ events, buckets, groups, startDate, endDat
               const isHighlighted = highlighted?.nodeIds.has(typed.id) ?? false
               const isHoveredNode = hoverTarget?.kind === 'node' && hoverTarget.nodeId === typed.id
               return (
-                <g key={typed.id} className="cursor-pointer" opacity={highlighted && !isHighlighted ? 0.28 : 1} onMouseEnter={() => {
+                <g key={typed.id} className="cursor-pointer" opacity={highlighted && !isHighlighted ? 0.28 : 1} onClick={(event) => {
+                  setHoverTarget({ kind: 'node', nodeId: typed.id })
+                  setHovered({ label: typed.label, value: typed.value ?? 0, color: typed.color })
+                  const bounds = containerRef.current?.getBoundingClientRect()
+                  if (bounds) setCursorPos({ x: Math.min(bounds.width - 150, Math.max(120, event.clientX - bounds.left)), y: Math.max(60, event.clientY - bounds.top) })
+                }} onMouseEnter={() => {
                   setHoverTarget({ kind: 'node', nodeId: typed.id })
                   setHovered({ label: typed.label, value: typed.value ?? 0, color: typed.color })
                 }}>

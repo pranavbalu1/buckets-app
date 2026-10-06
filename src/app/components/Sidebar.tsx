@@ -84,42 +84,44 @@ export default function Sidebar({
         </div>
       </div>
 
-      <div className="space-y-2 border-b border-line px-3 pb-3 md:hidden">
+      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-line px-3 pb-3 md:hidden">
         <ProfileCard name={userName} email={userEmail} />
-        <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-sunken hover:text-ink" onClick={onLogout}>
-          <LogOut className="size-4" /> Sign out
+        <button className="flex min-h-11 items-center gap-2 rounded-lg border border-line px-3 py-2 text-sm text-muted transition hover:bg-sunken hover:text-ink" onClick={onLogout}>
+          <LogOut className="size-4 shrink-0" /> <span>Sign out</span>
         </button>
       </div>
 
-      <div className="space-y-2 px-3 pb-4 md:px-4">
+      <div className="space-y-2 px-3 pb-3 md:px-4 md:pb-4">
         <button
           className="flex w-full items-center justify-between rounded-xl bg-accent px-3.5 py-3 text-sm font-semibold text-accent-ink shadow-sm transition hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           onClick={onAdd}
         >
           <span className="flex items-center gap-2"><Plus className="size-4" /> New transaction</span>
-          <kbd className="rounded-md bg-accent-ink/10 px-1.5 py-0.5 text-[10px] font-semibold text-accent-ink">N</kbd>
+          <kbd className="hidden rounded-md bg-accent-ink/10 px-1.5 py-0.5 text-[10px] font-semibold text-accent-ink md:inline">N</kbd>
         </button>
-        <button
-          type="button"
-          onClick={onOpenCommandMenu}
-          className="flex w-full items-center justify-between rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm text-muted transition hover:border-accent/40 hover:bg-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          aria-label="Search pages and actions"
-        >
-          <span className="flex items-center gap-2"><Search className="size-4" /> Search pages and actions</span>
-          <kbd className="rounded-md border border-line bg-sunken px-1.5 py-0.5 text-[10px] font-medium">Ctrl K</kbd>
-        </button>
-        <button
-          type="button"
-          onClick={onToggleMoveMode}
-          aria-pressed={moveMode}
-          className={`flex w-full items-center justify-between rounded-xl border px-3.5 py-2.5 text-sm transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent ${moveMode ? 'border-accent/40 bg-accent text-accent-ink' : 'border-line bg-surface text-muted hover:bg-sunken hover:text-ink'}`}
-        >
-          <span className="flex items-center gap-2"><Move className="size-4" /> {moveMode ? 'Finish moving tiles' : 'Move tiles'}</span>
-          {moveMode && <span className="size-1.5 rounded-full bg-accent-ink" aria-hidden />}
-        </button>
+        <div className="grid grid-cols-2 gap-2 md:grid-cols-1">
+          <button
+            type="button"
+            onClick={onOpenCommandMenu}
+            className="flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-xl border border-line bg-surface px-2.5 py-2.5 text-sm text-muted transition hover:border-accent/40 hover:bg-sunken hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:justify-between md:px-3.5"
+            aria-label="Search pages and actions"
+          >
+            <span className="flex min-w-0 items-center gap-2"><Search className="size-4 shrink-0" /><span className="truncate md:hidden">Search</span><span className="hidden truncate md:inline">Search pages and actions</span></span>
+            <kbd className="hidden rounded-md border border-line bg-sunken px-1.5 py-0.5 text-[10px] font-medium lg:inline">Ctrl K</kbd>
+          </button>
+          <button
+            type="button"
+            onClick={onToggleMoveMode}
+            aria-pressed={moveMode}
+            className={`flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-xl border px-2.5 py-2.5 text-sm transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent md:justify-between md:px-3.5 ${moveMode ? 'border-accent/40 bg-accent text-accent-ink' : 'border-line bg-surface text-muted hover:bg-sunken hover:text-ink'}`}
+          >
+            <span className="flex min-w-0 items-center gap-2"><Move className="size-4 shrink-0" /><span className="truncate md:hidden">{moveMode ? 'Done' : 'Move tiles'}</span><span className="hidden truncate md:inline">{moveMode ? 'Finish moving tiles' : 'Move tiles'}</span></span>
+            {moveMode && <span className="size-1.5 shrink-0 rounded-full bg-accent-ink" aria-hidden />}
+          </button>
+        </div>
       </div>
 
-      <nav aria-label="Main" className="flex gap-1 overflow-x-auto px-3 pb-3 md:flex-col md:px-3 md:pb-0">
+      <nav aria-label="Main" className="flex gap-1 overflow-x-auto overscroll-x-contain px-3 pb-3 [scrollbar-width:thin] md:flex-col md:overflow-x-visible md:px-3 md:pb-0">
         {TABS.map((item) => {
           const Icon = tabIcons[item]
           const selected = tab === item
@@ -128,7 +130,7 @@ export default function Sidebar({
               key={item}
               onClick={() => onNavigate(item)}
               aria-current={selected ? 'page' : undefined}
-              className={`flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm font-medium whitespace-nowrap transition md:w-full ${
+              className={`flex min-h-11 shrink-0 touch-manipulation items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm font-medium whitespace-nowrap transition md:w-full ${
                 selected ? 'bg-accent text-accent-ink shadow-sm' : 'text-muted hover:bg-sunken/70 hover:text-ink'
               }`}
             >

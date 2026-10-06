@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { DragEvent } from 'react'
-import { Check, ChevronDown, GripVertical, Plus, Sparkles, Users } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, ChevronDown, GripVertical, Plus, Sparkles, Users } from 'lucide-react'
 import { Button, Card, List, Modal, ProgressBar, Skeleton, Tile, TileBoard } from '../components'
 import type { ListItemData } from '../components'
 import Money from '../app/components/Money'
@@ -22,7 +22,7 @@ type Dialog =
 
 type Section = { key: string; title: string; group: BucketGroup | null; items: Bucket[] }
 
-const budgetGridColumns = 'grid min-w-[1010px] grid-cols-[minmax(210px,1.35fr)_minmax(190px,1.2fr)_minmax(130px,.9fr)_minmax(105px,.75fr)_minmax(220px,1.4fr)_minmax(90px,.6fr)] items-center gap-x-3'
+const budgetGridColumns = 'grid min-w-0 grid-cols-2 items-start gap-x-2 gap-y-2 sm:gap-x-3 2xl:min-w-[1010px] 2xl:grid-cols-[minmax(210px,1.35fr)_minmax(190px,1.2fr)_minmax(130px,.9fr)_minmax(105px,.75fr)_minmax(220px,1.4fr)_minmax(90px,.6fr)] 2xl:items-center'
 
 export default function Budget() {
   const { groups, buckets, events, addEvent } = useLedger()
@@ -55,10 +55,11 @@ export default function Budget() {
   }
 
   // Archived buckets stay visible while they still hold (or owe) money.
-  const shown = buckets.filter((b) => !b.archived || showArchived || availableOf(b) !== 0)
+  const shown = buckets.filter((b) => !b.archived || showArchived || availableOf(b) !== 0).sort((a, b) => a.sortOrder - b.sortOrder)
+  const orderedGroups = [...groups].sort((a, b) => a.sortOrder - b.sortOrder)
   const archivedCount = buckets.filter((b) => b.archived).length
   const sections: Section[] = [
-    ...groups.map((g) => ({
+    ...orderedGroups.map((g) => ({
       key: g.id,
       title: g.name,
       group: g,
@@ -102,6 +103,30 @@ export default function Budget() {
     await Promise.all(without.map((group, index) =>
       useLedger.getState().updateGroup(group.id, { sortOrder: index }),
     ))
+  }
+
+  function moveBucketBy(bucketId: string, section: Section, offset: -1 | 1) {
+    const index = section.items.findIndex((bucket) => bucket.id === bucketId)
+    const target = section.items[index + offset]
+    if (!target) return
+    void reorderBuckets(bucketId, target.id, target.groupId, offset < 0 ? 'before' : 'after')
+  }
+
+  function moveGroupBy(groupId: string, offset: -1 | 1) {
+    const ordered = [...groups].sort((a, b) => a.sortOrder - b.sortOrder)
+    const index = ordered.findIndex((group) => group.id === groupId)
+    const target = ordered[index + offset]
+    if (!target) return
+    if (offset < 0) void reorderGroups(groupId, target.id)
+    else {
+      const without = ordered.filter((group) => group.id !== groupId)
+      const targetIndex = without.findIndex((group) => group.id === target.id)
+      const source = ordered[index]
+      without.splice(targetIndex + 1, 0, source)
+      void Promise.all(without.map((group, order) =>
+        useLedger.getState().updateGroup(group.id, { sortOrder: order }),
+      ))
+    }
   }
 
   function startBucketDrag(event: DragEvent, bucketId: string) {
@@ -200,9 +225,9 @@ export default function Budget() {
     <div className="space-y-3">
       <TileBoard page="budget" className="grid grid-cols-1 gap-3">
       <Tile id="budget-summary" label="Budget totals">
-      <Card className="sticky top-2 z-10 flex flex-wrap items-center gap-x-6 gap-y-2 p-3 shadow-md backdrop-blur-xl">
+      <Card className="flex flex-wrap items-center gap-x-6 gap-y-2 p-3 shadow-md backdrop-blur-xl 2xl:sticky 2xl:top-2 2xl:z-10">
         <Figure label="Rain · unassigned" cents={rain} big accent={rain >= 0} />
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-3">
           <Figure label="Income" cents={budget.incomeCents} />
           <span className="text-muted">−</span>
           <Figure label="Spending" cents={budget.spentCents} />
@@ -247,9 +272,10 @@ export default function Budget() {
           <span className="tabular-nums text-muted-foreground">({archivedCount})</span>
         </label>
       </div>
-      <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <p className="flex items-start gap-1.5 text-xs leading-5 text-muted-foreground">
         <GripVertical className="size-3.5 shrink-0" aria-hidden />
-        Drag the handles to reorder. Drop on a bucket to place before or after it, or drop on a group to move to its end.
+        <span className="2xl:hidden">Use the up and down arrows to reorder on this device. Edit a bucket to change its group.</span>
+        <span className="hidden 2xl:inline">Drag the handles to reorder. Drop on a bucket to place before or after it, or drop on a group to move to its end.</span>
       </p>
       </div>
       </Tile>
@@ -266,6 +292,7 @@ export default function Budget() {
 
       {sections.map((section) => {
         const { group } = section
+        const groupIndex = group ? orderedGroups.findIndex((candidate) => candidate.id === group.id) : -1
         const isCollapsed = collapsed[section.key] ?? false
         const sum = (getValue: (bucket: Bucket) => number) =>
           section.items.reduce((total, bucket) => total + getValue(bucket), 0)
@@ -322,18 +349,22 @@ export default function Budget() {
                         draggable
                         aria-label={'Drag to reorder ' + group.name}
                         title="Drag this handle to reorder groups"
-                        className="grid size-7 shrink-0 cursor-grab place-items-center rounded-lg text-muted transition hover:bg-sunken hover:text-ink active:cursor-grabbing"
+                        className="hidden size-8 shrink-0 cursor-grab place-items-center rounded-lg text-muted transition hover:bg-sunken hover:text-ink active:cursor-grabbing 2xl:grid"
                         onDragStart={(event) => startGroupDrag(event, group.id)}
                         onDragEnd={endDrag}
                       >
                         <GripVertical className="size-4" aria-hidden />
                       </button>
                     )}
+                    {group && <div className="flex shrink-0 2xl:hidden" role="group" aria-label={`Reorder ${group.name}`}>
+                      <button type="button" className="grid size-10 place-items-center rounded-lg text-muted hover:bg-sunken disabled:opacity-35" aria-label={`Move ${group.name} up`} title="Move group up" disabled={groupIndex <= 0} onClick={() => moveGroupBy(group.id, -1)}><ArrowUp className="size-4" /></button>
+                      <button type="button" className="grid size-10 place-items-center rounded-lg text-muted hover:bg-sunken disabled:opacity-35" aria-label={`Move ${group.name} down`} title="Move group down" disabled={groupIndex < 0 || groupIndex === groups.length - 1} onClick={() => moveGroupBy(group.id, 1)}><ArrowDown className="size-4" /></button>
+                    </div>}
                     <button
                       type="button"
                       aria-expanded={!isCollapsed}
                       onClick={() => toggle(section.key)}
-                      className="flex min-w-0 items-center gap-1.5 rounded-lg py-0.5 text-left text-sm font-semibold hover:text-accent"
+                      className="flex min-h-10 min-w-0 items-center gap-1.5 rounded-lg py-0.5 text-left text-sm font-semibold hover:text-accent"
                     >
                       <ChevronDown className={'size-4 shrink-0 text-muted transition-transform ' + (isCollapsed ? '-rotate-90' : '')} aria-hidden />
                       {group && (
@@ -358,7 +389,7 @@ export default function Budget() {
                     {group && (
                       <button
                         type="button"
-                        className="btn-link text-sm"
+                        className="btn-link inline-flex min-h-10 items-center text-sm"
                         aria-label={'Edit group ' + group.name}
                         onClick={() => setDialog({ kind: 'editor', target: { type: 'group', value: group } })}
                       >
@@ -374,7 +405,7 @@ export default function Budget() {
                   <span>Spent <strong className="font-semibold text-ink">{formatCents(groupSpent)}</strong></span>
                 </div>
                 {!isCollapsed && section.items.length > 0 && (
-                  <div className={`${budgetGridColumns} mt-2 border-y border-border/80 bg-sunken/35 px-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground`}>
+                  <div className={`${budgetGridColumns} mt-2 hidden border-y border-border/80 bg-sunken/35 px-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground 2xl:grid`}>
                     <span>Bucket</span>
                     <span>Balance</span>
                     <span>In / Out</span>
@@ -425,7 +456,7 @@ export default function Budget() {
                         draggable
                         aria-label={'Drag to reorder ' + bucket.name}
                         title="Drag to reorder. Drop on another bucket to place before or after it, or on a group to move it there."
-                        className="grid size-6 shrink-0 cursor-grab place-items-center rounded-md text-muted transition hover:bg-sunken hover:text-ink active:cursor-grabbing"
+                        className="hidden size-8 shrink-0 cursor-grab place-items-center rounded-md text-muted transition hover:bg-sunken hover:text-ink active:cursor-grabbing 2xl:grid"
                         onDragStart={(event) => startBucketDrag(event, bucket.id)}
                         onDragEnd={endDrag}
                       >
@@ -445,6 +476,7 @@ export default function Budget() {
                     </div>
 
                     <div className="min-w-0">
+                      <span className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-muted-foreground 2xl:hidden">Balance</span>
                       <p className={`truncate text-sm font-semibold tabular-nums ${available < 0 ? 'text-bad' : ''}`}><Money cents={available} /></p>
                       {!isExpanded && <p
                         className="truncate text-[11px] leading-4 text-muted-foreground"
@@ -454,12 +486,17 @@ export default function Budget() {
                       </p>}
                     </div>
                     <div className="min-w-0">
+                      <span className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-muted-foreground 2xl:hidden">In / Out</span>
                       {!bucket.archived
                         ? <InOutCell name={bucket.name} onSubmit={(cents) => moveInOut(bucket, cents)} />
                         : <span className="text-xs text-muted-foreground">Archived</span>}
                     </div>
-                    <WantCell key={bucket.id + '-' + bucket.monthlyTargetCents} bucket={bucket} />
-                    {!isExpanded && <div className="min-w-0 space-y-1 px-2">
+                    <div className="min-w-0">
+                      <span className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-muted-foreground 2xl:hidden">Monthly want</span>
+                      <WantCell key={bucket.id + '-' + bucket.monthlyTargetCents} bucket={bucket} />
+                    </div>
+                    {!isExpanded && <div className="col-span-2 min-w-0 space-y-1 2xl:col-span-1 2xl:px-2">
+                      <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground 2xl:hidden">Activity</span>
                       {bucket.monthlyTargetCents > 0 ? (
                         <div title={`Spent ${formatCents(spent)} · ${formatCents(funded)} funded of ${formatCents(bucket.monthlyTargetCents)}`}>
                           <p className="truncate text-[11px] leading-4 tabular-nums">
@@ -470,11 +507,15 @@ export default function Budget() {
                         </div>
                       ) : <p className="truncate text-[11px] text-muted-foreground">Spent {formatCents(spent)} · No want set</p>}
                     </div>}
-                    {isExpanded && <span aria-hidden="true" />}
-                    <div className="flex items-center justify-end gap-2">
+                    {isExpanded && <span className="hidden 2xl:block" aria-hidden="true" />}
+                    <div className="col-span-2 flex items-center justify-between gap-2 2xl:col-span-1 2xl:justify-end">
+                      <div className="flex 2xl:hidden" role="group" aria-label={`Reorder ${bucket.name}`}>
+                        <button type="button" className="grid size-10 place-items-center rounded-lg text-muted hover:bg-sunken disabled:opacity-35" aria-label={`Move ${bucket.name} up`} title="Move bucket up" disabled={section.items[0]?.id === bucket.id} onClick={() => moveBucketBy(bucket.id, section, -1)}><ArrowUp className="size-4" /></button>
+                        <button type="button" className="grid size-10 place-items-center rounded-lg text-muted hover:bg-sunken disabled:opacity-35" aria-label={`Move ${bucket.name} down`} title="Move bucket down" disabled={section.items.at(-1)?.id === bucket.id} onClick={() => moveBucketBy(bucket.id, section, 1)}><ArrowDown className="size-4" /></button>
+                      </div>
                       <button
                         type="button"
-                        className="btn-link text-xs"
+                        className="btn-link inline-flex min-h-10 items-center text-xs"
                         aria-label={'Edit ' + bucket.name}
                         onClick={() => setDialog({ kind: 'editor', target: { type: 'bucket', value: bucket } })}
                       >
@@ -482,7 +523,7 @@ export default function Budget() {
                       </button>
                       <button
                         type="button"
-                        className="btn-link whitespace-nowrap text-xs"
+                        className="btn-link inline-flex min-h-10 items-center whitespace-nowrap text-xs"
                         aria-label={(isExpanded ? 'Hide' : 'Show') + ' calculation for ' + bucket.name}
                         aria-expanded={isExpanded}
                         aria-controls={'bucket-details-' + bucket.id}
@@ -554,18 +595,18 @@ export function BudgetSkeleton() {
           <div className="flex flex-wrap gap-x-4 gap-y-1">
             <Skeleton className="h-3 w-36" /><Skeleton className="h-3 w-32" /><Skeleton className="h-3 w-28" />
           </div>
-          <div className={`${budgetGridColumns} border-y border-border/80 bg-sunken/35 px-2 py-1.5`}>
+          <div className={`${budgetGridColumns} hidden border-y border-border/80 bg-sunken/35 px-2 py-1.5 2xl:grid`}>
             {['w-24', 'w-20', 'w-16', 'w-14', 'w-20', 'w-12'].map((width, index) => <Skeleton key={index} className={`h-2.5 ${width}`} />)}
           </div>
           <div>
             {Array.from({ length: bucketCount }, (_, rowIndex) => (
               <div key={rowIndex} className={`${budgetGridColumns} border-b border-border/60 px-1 py-2`}>
-                <div className="flex min-w-0 items-center gap-2"><Skeleton className="size-4 rounded" /><Skeleton className="size-2.5 rounded-full" /><Skeleton className="h-3.5 w-28" /><Skeleton className="h-2.5 w-16" /></div>
-                <Skeleton className="h-7 w-28" />
-                <Skeleton className="h-7 w-28" />
-                <Skeleton className="h-7 w-20" />
-                <div className="space-y-1"><Skeleton className="h-2.5 w-40" /><Skeleton className="h-1.5 w-24 rounded-full" /></div>
-                <div className="ml-auto flex gap-2"><Skeleton className="h-3 w-8" /><Skeleton className="h-3 w-12" /></div>
+                <div className="flex min-w-0 items-center gap-1.5"><Skeleton className="hidden size-4 rounded 2xl:block" /><Skeleton className="size-2.5 shrink-0 rounded-full" /><Skeleton className="h-3.5 w-24 max-w-full" /><Skeleton className="hidden h-2.5 w-16 2xl:block" /></div>
+                <Skeleton className="h-7 w-24 max-w-full" />
+                <Skeleton className="h-7 w-full max-w-28" />
+                <Skeleton className="h-7 w-20 max-w-full" />
+                <div className="col-span-2 space-y-1 2xl:col-span-1"><Skeleton className="h-2.5 w-40 max-w-full" /><Skeleton className="h-1.5 w-24 max-w-full rounded-full" /></div>
+                <div className="col-span-2 flex justify-between gap-2 2xl:col-span-1 2xl:justify-end"><Skeleton className="h-10 w-20 rounded-lg 2xl:hidden" /><div className="ml-auto flex gap-2"><Skeleton className="h-3 w-8" /><Skeleton className="h-3 w-12" /></div></div>
               </div>
             ))}
           </div>
@@ -678,7 +719,7 @@ function Figure({ label, cents, big = false, accent = false }: {
 }) {
   return (
     <div>
-      <div className={`${big ? 'text-2xl' : 'text-lg'} font-semibold`}>
+      <div className={`${big ? 'text-xl sm:text-2xl' : 'text-base sm:text-lg'} font-semibold`}>
         <Money cents={cents} className={accent ? 'text-accent' : ''} />
       </div>
       <div className="text-xs text-muted">{label}</div>
@@ -714,7 +755,7 @@ function InOutCell({ name, onSubmit }: { name: string; onSubmit: (cents: number)
         <input
           aria-label={`Put in or take out of ${name}`}
           title="Enter a positive amount to assign from Rain, or a negative amount to return to Rain."
-          className="min-w-0 flex-1 rounded-md border border-foreground/20 bg-surface px-2 py-1 text-right text-sm tabular-nums outline-none placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent/25"
+          className="min-h-10 min-w-0 flex-1 rounded-md border border-foreground/20 bg-surface px-2 py-2 text-right text-sm tabular-nums outline-none placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent/25 2xl:min-h-0 2xl:py-1"
           inputMode="decimal"
           autoComplete="off"
           placeholder="+/− amount"
@@ -726,7 +767,7 @@ function InOutCell({ name, onSubmit }: { name: string; onSubmit: (cents: number)
           type="button"
           aria-label={`Apply amount for ${name}`}
           title="Apply amount"
-          className="grid size-8 shrink-0 place-items-center rounded-md border border-foreground/20 text-foreground transition hover:border-accent hover:bg-accent-soft hover:text-ink disabled:cursor-not-allowed disabled:opacity-40"
+          className="grid size-10 shrink-0 place-items-center rounded-md border border-foreground/20 text-foreground transition hover:border-accent hover:bg-accent-soft hover:text-ink disabled:cursor-not-allowed disabled:opacity-40 2xl:size-8"
           disabled={!value.trim() || busy}
           onClick={() => void submit()}
         >
@@ -761,13 +802,13 @@ function WantCell({ bucket }: { bucket: Bucket }) {
 
   return (
     <div className="min-w-0">
-      <div className={`flex min-w-0 items-center justify-end gap-0.5 rounded-md border bg-surface px-1.5 py-0.5 transition-colors hover:border-muted focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/25 ${error ? 'border-bad/60' : 'border-foreground/20'}`}>
+      <div className={`flex min-h-10 min-w-0 items-center justify-end gap-0.5 rounded-md border bg-surface px-1.5 py-0.5 transition-colors hover:border-muted focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/25 2xl:min-h-0 ${error ? 'border-bad/60' : 'border-foreground/20'}`}>
         <span className="text-xs text-muted" aria-hidden>$</span>
         <input
           aria-label={`Monthly want for ${bucket.name}`}
           aria-invalid={Boolean(error)}
           title="Edit the monthly want. Press Enter or leave the field to save."
-          className="w-[4.5rem] min-w-0 bg-transparent py-0.5 text-right text-sm tabular-nums outline-none placeholder:text-muted/70"
+          className="w-[4.5rem] min-w-0 bg-transparent py-2 text-right text-sm tabular-nums outline-none placeholder:text-muted/70 2xl:py-0.5"
           inputMode="decimal"
           placeholder="0.00"
           value={value}

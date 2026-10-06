@@ -1,7 +1,9 @@
 import { useMemo, useRef, useState } from 'react'
 import {
   Archive,
+  ArrowDown,
   ArrowDownToLine,
+  ArrowUp,
   Check,
   GripVertical,
   History,
@@ -46,22 +48,30 @@ export default function Accounts() {
   const [draggedId, setDraggedId] = useState<string | null>(null)
 
   const visible = accounts.filter((account) => showArchived || !account.archived)
+  const orderedVisible = [...visible].sort((a, b) => a.sortOrder - b.sortOrder)
   const total = accounts
     .filter((account) => !account.archived)
     .reduce((sum, account) => sum + (balances.accounts[account.id] ?? 0), 0)
   const activeCount = accounts.filter((account) => !account.archived).length
 
-  async function reorder(sourceId: string, targetId: string) {
+  async function reorder(sourceId: string, targetId: string, placement: 'before' | 'after' = 'before') {
     if (sourceId === targetId) return
     const ordered = [...accounts].sort((a, b) => a.sortOrder - b.sortOrder)
     const source = ordered.find((account) => account.id === sourceId)
     if (!source) return
     const without = ordered.filter((account) => account.id !== sourceId)
     const targetIndex = without.findIndex((account) => account.id === targetId)
-    without.splice(targetIndex < 0 ? without.length : targetIndex, 0, source)
+    without.splice(targetIndex < 0 ? without.length : targetIndex + (placement === 'after' ? 1 : 0), 0, source)
     await Promise.all(without.map((account, index) =>
       useLedger.getState().updateAccount(account.id, { sortOrder: index }),
     ))
+  }
+
+  async function moveAccountBy(accountId: string, offset: -1 | 1) {
+    const index = orderedVisible.findIndex((account) => account.id === accountId)
+    const target = orderedVisible[index + offset]
+    if (!target) return
+    await reorder(accountId, target.id, offset < 0 ? 'before' : 'after')
   }
 
   async function submit(event: React.FormEvent) {
@@ -223,7 +233,7 @@ export default function Accounts() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="font-semibold">Your accounts</h2>
-          <p className="mt-0.5 text-xs text-muted">Drag an account to change its order.</p>
+          <p className="mt-0.5 text-xs text-muted">Use the arrows to reorder on a phone, or drag an account on desktop.</p>
         </div>
         <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-xs font-medium text-muted transition hover:text-ink">
           <input className="accent-accent" type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />
@@ -238,9 +248,14 @@ export default function Accounts() {
           <p className="mt-1 text-sm text-muted">Add an account above to start tracking balances.</p>
         </Card>
       ) : (
-        <ul className="grid gap-3 lg:grid-cols-2">
-          {visible.map((account) => (
+        <ul className="grid min-w-0 gap-3 lg:grid-cols-2">
+          {orderedVisible.map((account, accountIndex) => {
+            return (
             <AccountRow key={account.id} account={account} balance={balances.accounts[account.id] ?? 0}
+              canMoveUp={accountIndex > 0}
+              canMoveDown={accountIndex < orderedVisible.length - 1}
+              onMoveUp={() => void moveAccountBy(account.id, -1)}
+              onMoveDown={() => void moveAccountBy(account.id, 1)}
               onHistory={() => setHistoryAccount(account)}
               onDragStart={() => setDraggedId(account.id)}
               onDragEnd={() => setDraggedId(null)}
@@ -249,7 +264,7 @@ export default function Accounts() {
                 setDraggedId(null)
               }}
               onDelete={() => { setDeleteError(''); setAccountToDelete(account) }} />
-          ))}
+          )})}
         </ul>
       )}
       </Tile>
@@ -287,9 +302,13 @@ export default function Accounts() {
   )
 }
 
-function AccountRow({ account, balance, onHistory, onDragStart, onDragEnd, onDrop, onDelete }: {
+function AccountRow({ account, balance, canMoveUp, canMoveDown, onMoveUp, onMoveDown, onHistory, onDragStart, onDragEnd, onDrop, onDelete }: {
   account: Account
   balance: number
+  canMoveUp: boolean
+  canMoveDown: boolean
+  onMoveUp: () => void
+  onMoveDown: () => void
   onHistory: () => void
   onDragStart: () => void
   onDragEnd: () => void
@@ -324,10 +343,14 @@ function AccountRow({ account, balance, onHistory, onDragStart, onDragEnd, onDro
       onDragOver={(event) => event.preventDefault()}
       onDrop={onDrop}
     >
-      <Card className="flex h-full items-center gap-3 p-4 transition hover:border-accent/35 hover:shadow-md sm:gap-4">
-        <GripVertical className="size-4 shrink-0 cursor-grab text-muted/70" aria-label="Drag to reorder" />
-        <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent"><WalletCards className="size-[18px]" /></span>
-        <div className="min-w-0 flex-1">
+      <Card className="grid min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-2 gap-y-2 p-3 transition hover:border-accent/35 hover:shadow-md sm:flex sm:gap-4 sm:p-4">
+        <GripVertical className="hidden size-4 shrink-0 cursor-grab text-muted/70 sm:block" aria-label="Drag to reorder" />
+        <div className="row-span-2 flex flex-col sm:hidden">
+          <button type="button" className="grid size-10 place-items-center rounded-lg text-muted hover:bg-sunken disabled:opacity-35" aria-label={`Move ${account.name} up`} disabled={!canMoveUp} onClick={onMoveUp}><ArrowUp className="size-4" /></button>
+          <button type="button" className="grid size-10 place-items-center rounded-lg text-muted hover:bg-sunken disabled:opacity-35" aria-label={`Move ${account.name} down`} disabled={!canMoveDown} onClick={onMoveDown}><ArrowDown className="size-4" /></button>
+        </div>
+        <span className="hidden size-10 shrink-0 place-items-center rounded-xl bg-accent-soft text-accent sm:grid"><WalletCards className="size-[18px]" /></span>
+        <div className="col-start-2 row-start-1 min-w-0 sm:col-auto sm:row-auto sm:flex-1">
           {editing ? (
             <div className="space-y-1">
               <Input aria-label="Rename account" autoFocus className="h-8 py-1" value={name}
@@ -352,21 +375,21 @@ function AccountRow({ account, balance, onHistory, onDragStart, onDragEnd, onDro
           )}
           {!editing && <div className="mt-0.5 text-xs text-muted">{ACCOUNT_TYPE_LABELS[account.type]}</div>}
         </div>
-        <div className="shrink-0 text-right">
-          <div className="text-base font-semibold tabular-nums"><span>{formatCents(balance)}</span></div>
+        <div className="col-start-3 row-start-1 shrink-0 text-right sm:col-auto sm:row-auto">
+          <div className="text-sm font-semibold tabular-nums sm:text-base"><span>{formatCents(balance)}</span></div>
           <div className="text-[10px] text-muted">Current balance</div>
         </div>
-        <div className="ml-1 flex shrink-0 items-center gap-1 border-l border-line pl-2">
-          <button className="grid size-8 place-items-center rounded-lg text-muted transition hover:bg-sunken hover:text-ink" aria-label={`View ${account.name} history`} title="View account history" onClick={onHistory}>
+        <div className="col-span-2 col-start-2 row-start-2 flex min-w-0 items-center justify-end gap-1 border-t border-line pt-1 sm:ml-1 sm:col-span-1 sm:col-start-auto sm:row-start-auto sm:shrink-0 sm:border-l sm:border-t-0 sm:pt-0 sm:pl-2">
+          <button className="grid size-10 place-items-center rounded-lg text-muted transition hover:bg-sunken hover:text-ink sm:size-8" aria-label={`View ${account.name} history`} title="View account history" onClick={onHistory}>
             <History className="size-3.5" />
           </button>
-          <button className="grid size-8 place-items-center rounded-lg text-muted transition hover:bg-sunken hover:text-ink" aria-label={editing ? `Save ${account.name}` : `Rename ${account.name}`} title={editing ? 'Save name' : 'Rename'} onClick={() => editing ? void save() : setEditing(true)}>
+          <button className="grid size-10 place-items-center rounded-lg text-muted transition hover:bg-sunken hover:text-ink sm:size-8" aria-label={editing ? `Save ${account.name}` : `Rename ${account.name}`} title={editing ? 'Save name' : 'Rename'} onClick={() => editing ? void save() : setEditing(true)}>
             {editing ? <Check className="size-3.5" /> : <Pencil className="size-3.5" />}
           </button>
-          <button className="grid size-8 place-items-center rounded-lg text-muted transition hover:bg-sunken hover:text-ink" aria-label={account.archived ? `Restore ${account.name}` : `Archive ${account.name}`} title={account.archived ? 'Restore account' : 'Archive account'} onClick={() => updateAccount(account.id, { archived: !account.archived })}>
+          <button className="grid size-10 place-items-center rounded-lg text-muted transition hover:bg-sunken hover:text-ink sm:size-8" aria-label={account.archived ? `Restore ${account.name}` : `Archive ${account.name}`} title={account.archived ? 'Restore account' : 'Archive account'} onClick={() => updateAccount(account.id, { archived: !account.archived })}>
             {account.archived ? <RotateCcw className="size-3.5" /> : <Archive className="size-3.5" />}
           </button>
-          <button className="grid size-8 place-items-center rounded-lg text-muted transition hover:bg-bad-soft hover:text-bad" aria-label={`Delete ${account.name}`} title="Delete account" onClick={onDelete}>
+          <button className="grid size-10 place-items-center rounded-lg text-muted transition hover:bg-bad-soft hover:text-bad sm:size-8" aria-label={`Delete ${account.name}`} title="Delete account" onClick={onDelete}>
             <Trash2 className="size-3.5" />
           </button>
         </div>

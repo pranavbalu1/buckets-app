@@ -53,9 +53,9 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
   }, [])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 pb-[env(safe-area-inset-bottom)] sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={`${dialogId}-title`} tabIndex={-1}
-        className="card max-h-[90vh] w-full overflow-y-auto rounded-b-none p-5 sm:max-w-lg sm:rounded-b-xl"
+        className="card max-h-[90vh] max-h-[90dvh] w-full touch-pan-y overscroll-contain overflow-y-auto rounded-b-none p-4 sm:max-w-lg sm:rounded-b-xl sm:p-5"
         onMouseDown={(event) => event.stopPropagation()}>
         <div className="mb-4 flex items-center justify-between">
           <h2 id={`${dialogId}-title`} className="text-lg font-semibold">{title}</h2>

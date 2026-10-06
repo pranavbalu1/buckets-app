@@ -197,6 +197,7 @@ export function StackedBarGraph({
     value: number;
     color: string;
   } | null>(null);
+  const graphRef = React.useRef<HTMLDivElement>(null);
 
   const dropdownRef = React.useRef<HTMLDivElement>(null);
 
@@ -257,6 +258,13 @@ export function StackedBarGraph({
     });
   };
 
+  const selectSegment = (e: React.MouseEvent<HTMLElement>, segment: StackSegment) => {
+    e.stopPropagation();
+    setHoveredSegment({ label: segment.label?.trim() || segment.key, value: segment.value, color: segment.color });
+    const rect = graphRef.current?.getBoundingClientRect();
+    if (rect) setCursorPos({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+  };
+
   const handleTimeframeSelect = (option: string) => {
     setSelectedTimeframe(option);
     setIsDropdownOpen(false);
@@ -276,9 +284,10 @@ export function StackedBarGraph({
   return (
     <div
       className={cn(
-        'relative w-full rounded-3xl bg-surface border border-border/40 p-6 text-foreground select-none flex flex-col justify-between',
+        'relative w-full min-w-0 rounded-3xl bg-surface border border-border/40 p-4 sm:p-6 text-foreground select-none flex flex-col justify-between',
         className,
       )}
+      ref={graphRef}
       onMouseMove={handleMouseMove}
       onMouseLeave={() => {
         setHoveredSegment(null);
@@ -304,7 +313,7 @@ export function StackedBarGraph({
 
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-xl font-bold tracking-tight text-foreground">{title}</h3>
+        <h3 className="text-lg font-bold tracking-tight text-foreground sm:text-xl">{title}</h3>
         <div className="flex items-center gap-2">
           <div className="relative" ref={dropdownRef}>
             <button
@@ -369,7 +378,8 @@ export function StackedBarGraph({
           <span>0</span>
         </div>
 
-        <div className="flex-1 flex items-end justify-between gap-3 h-full px-2">
+        <div className="min-w-0 flex-1 overflow-x-auto overscroll-x-contain touch-pan-x">
+        <div className={`flex h-full items-end justify-between gap-3 px-2 ${activeData.length > 7 ? 'min-w-[36rem]' : ''}`}>
           {activeData.map((col, colIdx) => {
             const isSelected = selectedIndex === colIdx;
             const isHoveredCol = hoveredColIndex === colIdx;
@@ -436,12 +446,9 @@ export function StackedBarGraph({
                   key={segIdx}
                           onMouseEnter={(e) => {
                             e.stopPropagation();
-                            setHoveredSegment({
-                              label: seg.label?.trim() || seg.key,
-                              value: seg.value,
-                              color: seg.color,
-                            });
+                            setHoveredSegment({ label: seg.label?.trim() || seg.key, value: seg.value, color: seg.color });
                           }}
+                          onClick={(e) => selectSegment(e, seg)}
                   className={cn(
                     'w-full transition-all duration-200 cursor-pointer hover:brightness-125',
                     seg.color,
@@ -470,6 +477,7 @@ export function StackedBarGraph({
               </div>
             );
           })}
+        </div>
         </div>
       </div>
 
@@ -563,7 +571,7 @@ export function SemiGaugeGraph({
   return (
     <div
       className={cn(
-        'w-full rounded-3xl bg-surface border border-border/40 p-6 text-foreground select-none flex flex-col justify-between',
+        'w-full min-w-0 rounded-3xl bg-surface border border-border/40 p-4 sm:p-6 text-foreground select-none flex flex-col justify-between',
         className,
       )}
       onMouseMove={(event) => {
@@ -645,6 +653,7 @@ export function SemiGaugeGraph({
                   strokeLinejoin="round"
                   className="cursor-pointer transition-all duration-200"
                   onMouseEnter={() => setActiveIndex(idx)}
+                  onClick={() => setActiveIndex(idx)}
                 />,
               );
               return { angle: nextAngle, nodes: state.nodes };
@@ -664,6 +673,7 @@ export function SemiGaugeGraph({
                 strokeLinecap="round"
                 className="cursor-pointer hover:stroke-white transition-all duration-200"
                 onMouseEnter={() => setActiveIndex(idx)}
+                onClick={() => setActiveIndex(idx)}
               />,
             );
             return { angle: nextAngle, nodes: state.nodes };
@@ -689,8 +699,17 @@ export function SemiGaugeGraph({
             <div
               key={idx}
               onMouseEnter={() => setActiveIndex(idx)}
+              onClick={() => setActiveIndex(idx)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault()
+                  setActiveIndex(idx)
+                }
+              }}
               className={cn(
-                'flex min-w-0 items-center justify-between gap-2 text-xs px-1.5 py-1 rounded-lg cursor-pointer transition-colors',
+                'flex min-h-10 min-w-0 items-center justify-between gap-2 text-xs px-1.5 py-1 rounded-lg cursor-pointer transition-colors',
                 isSelected ? 'bg-sunken' : 'hover:bg-sunken/60',
               )}
             >
@@ -800,7 +819,7 @@ export function AreaLineGraph({
   return (
     <div
       className={cn(
-        'w-full rounded-3xl bg-surface border border-border/40 p-6 text-foreground select-none flex flex-col justify-between',
+        'w-full min-w-0 rounded-3xl bg-surface border border-border/40 p-4 sm:p-6 text-foreground select-none flex flex-col justify-between',
         className,
       )}
       {...props}
@@ -931,6 +950,11 @@ export function AreaLineGraph({
               key={idx}
               className="flex-1 h-full cursor-pointer"
               onMouseEnter={() => setHoveredIdx(idx)}
+              onClick={(event) => {
+                setHoveredIdx(idx)
+                const bounds = event.currentTarget.parentElement?.getBoundingClientRect()
+                if (bounds) setCursorPos({ x: event.clientX - bounds.left, y: event.clientY - bounds.top })
+              }}
             />
           ))}
         </div>
@@ -1038,6 +1062,11 @@ export function MiniSparklineGraph({
             key={index}
             className="h-full flex-1 cursor-pointer"
             onMouseEnter={() => setHoveredIdx(index)}
+            onClick={(event) => {
+              setHoveredIdx(index)
+              const bounds = event.currentTarget.parentElement?.getBoundingClientRect()
+              if (bounds) setCursorPos({ x: event.clientX - bounds.left, y: event.clientY - bounds.top })
+            }}
           />)}
         </div>
       </div>
