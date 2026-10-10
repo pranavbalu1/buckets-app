@@ -52,7 +52,7 @@ export default function Dashboard({ onAdd, onNavigate }: {
 
   const balances = useMemo(() => computeBalances(events), [events])
   const monthly = useMemo(
-    () => computeMonthBudget(events, buckets.map((bucket) => bucket.id), month),
+    () => computeMonthBudget(events, buckets, month),
     [events, buckets, month],
   )
   const monthlyAnalytics = useMemo(
@@ -78,11 +78,9 @@ export default function Dashboard({ onAdd, onNavigate }: {
     }
   })
 
-  const overspent = monthly.buckets.filter((row) => row.availableCents < 0)
-  const target = buckets
-    .filter((bucket) => !bucket.archived)
-    .reduce((total, bucket) => total + bucket.monthlyTargetCents, 0)
-  const targetProgress = target > 0 ? Math.max(0, Math.min(100, Math.round((monthly.allocatedCents / target) * 100))) : 0
+  const needsCoverage = monthly.buckets.filter((row) => row.uncoveredCents > 0)
+  const target = monthly.plannedCents
+  const planUsage = target > 0 ? Math.max(0, Math.round((monthly.spentCents / target) * 100)) : 0
   const cashflowScale = Math.max(monthly.incomeCents, monthly.spentCents, 1)
   const activeAccountTotal = accounts
     .filter((account) => !account.archived)
@@ -150,7 +148,7 @@ export default function Dashboard({ onAdd, onNavigate }: {
         <MetricCard type="compact" priority={balances.unallocated === 0 ? 'medium' : 'high'} title={balances.unallocated >= 0 ? 'Ready to assign' : 'Buckets ahead of cash'} amount={formatCents(balances.unallocated)} />
       </Tile>
       <Tile id="monthly-target" label="Monthly target">
-        <MetricCard type="compact" priority="low" title={target ? `Monthly target · ${targetProgress}% funded` : 'Monthly target'} amount={formatCents(target)} />
+      <MetricCard type="compact" priority="low" title="Monthly plan" amount={formatCents(target)} subtitle="Expected expense total" />
       </Tile>
 
       <Tile id="monthly-snapshot" label="Monthly snapshot" className="col-span-full xl:col-span-2">
@@ -166,17 +164,19 @@ export default function Dashboard({ onAdd, onNavigate }: {
           </div>
           <div className="grid grid-cols-2 gap-3 rounded-xl bg-sunken/70 p-4 sm:grid-cols-4">
             <MiniStat label="Income" cents={monthly.incomeCents} />
-            <MiniStat label="Assigned" cents={monthly.allocatedCents} />
+            <MiniStat label="Planned" cents={monthly.plannedCents} />
             <MiniStat label="Spent" cents={monthly.spentCents} />
-            <MiniStat label="Saved" cents={monthlyAnalytics.savingsCents} />
+            <MiniStat label={monthly.budgetVarianceCents < 0 ? 'Over plan' : monthly.budgetVarianceCents > 0 ? 'Under plan' : 'On plan'} cents={Math.abs(monthly.budgetVarianceCents)} />
+            <MiniStat label="Covered" cents={monthly.coveredExpenseCents} />
+            <MiniStat label="Savings assigned" cents={monthlyAnalytics.savingsCents} />
           </div>
           <div className="mt-6">
             <div className="mb-2 flex items-center justify-between gap-3 text-sm">
-              <span className="text-muted">Monthly target progress</span>
-              <span className="font-semibold">{target > 0 ? `${targetProgress}%` : 'No targets yet'}</span>
+              <span className="text-muted">Expenses covered</span>
+              <span className="font-semibold">{monthly.coverableSpentCents > 0 ? `${Math.round(monthly.coveredExpenseCents / monthly.coverableSpentCents * 100)}%` : 'No expense-bucket spending yet'}</span>
             </div>
-            <ProgressBar pct={targetProgress} />
-            {target > 0 && <p className="mt-2 text-xs text-muted">{formatCents(monthly.allocatedCents)} assigned toward {formatCents(target)}</p>}
+            <ProgressBar pct={monthly.coverableSpentCents > 0 ? monthly.coveredExpenseCents / monthly.coverableSpentCents * 100 : 0} over={monthly.uncoveredExpenseCents > 0} />
+            {monthly.coverableSpentCents > 0 && <p className="mt-2 text-xs text-muted">{formatCents(monthly.coveredExpenseCents)} of {formatCents(monthly.coverableSpentCents)} expense-bucket spending covered · {planUsage}% of plan used</p>}
           </div>
         </Card>
       </Tile>
@@ -199,21 +199,21 @@ export default function Dashboard({ onAdd, onNavigate }: {
         </Card>
       </Tile>
 
-      {overspent.length > 0 && (
-        <Tile id="needs-attention" label="Overdrawn buckets" className="col-span-full">
+      {needsCoverage.length > 0 && (
+        <Tile id="needs-attention" label="Expenses needing coverage" className="col-span-full">
         <Card className="border-bad/35 bg-bad-soft/45 p-4 md:p-5">
           <div className="mb-3 flex items-center justify-between gap-3">
             <div>
               <p className="text-xs font-semibold tracking-wide text-bad uppercase">Needs attention</p>
-              <h2 className="mt-1 font-semibold">A few buckets are overdrawn</h2>
+              <h2 className="mt-1 font-semibold">Some recorded expenses still need coverage</h2>
             </div>
             <Button variant="ghost" size="sm" className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-bad" onClick={() => onNavigate('Budget')}>Review budget <ArrowUpRight className="size-3.5" /></Button>
           </div>
           <ul className="divide-y divide-bad/10">
-            {overspent.map((row) => (
+            {needsCoverage.map((row) => (
               <li key={row.bucketId} className="flex items-center justify-between gap-3 py-2 text-sm">
                 <span>{bucketName(row.bucketId)}</span>
-                <Money cents={row.availableCents} />
+                <Money cents={row.uncoveredCents} />
               </li>
             ))}
           </ul>

@@ -98,7 +98,7 @@ function BucketForm({ bucket, onClose }: { bucket?: Bucket; onClose: () => void 
           </Field>
         </div>
         <p className="rounded-lg bg-sunken px-3 py-2 text-xs text-muted">{BUCKET_KIND_DESCRIPTIONS[kind]}</p>
-        {kind === 'recurring' && <MoneyField label="Monthly amount" value={monthly} onChange={setMonthly} />}
+        {kind === 'recurring' && <MoneyField label="Planned monthly spending" value={monthly} onChange={setMonthly} />}
         {kind === 'save_by_date' && <><MoneyField label="Target amount" value={target} onChange={setTarget} /><DateField value={date} onChange={setDate} /></>}
         {kind === 'save_by_deposit' && <><MoneyField label="Target amount" value={target} onChange={setTarget} /><MoneyField label="Monthly deposit" value={monthly} onChange={setMonthly} /></>}
         {kind === 'save_until_date' && <><MoneyField label="Monthly deposit" value={monthly} onChange={setMonthly} /><DateField value={date} onChange={setDate} /></>}

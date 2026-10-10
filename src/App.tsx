@@ -299,7 +299,7 @@ function WorkspaceLayout({
               </div>
             )}
             {tab !== 'Dashboard' && (
-              <div className={`mb-6 flex flex-wrap items-end justify-between gap-4 md:mb-8 ${tab === 'Budget' ? 'mb-4 md:mb-5' : ''}`}>
+              <div className={`mb-6 flex flex-wrap items-start justify-between gap-3 sm:items-end sm:gap-4 md:mb-8 ${tab === 'Budget' ? 'mb-4 md:mb-5' : ''}`}>
                 <div>
                   <div className="mb-2 flex items-center gap-2 text-xs font-semibold tracking-[0.13em] text-accent uppercase">
                     <span className="size-1.5 rounded-full bg-accent" /> Workspace
@@ -307,7 +307,7 @@ function WorkspaceLayout({
                   <h1 className={`font-semibold tracking-tight ${tab === 'Budget' ? 'text-2xl md:text-[1.75rem]' : 'text-3xl md:text-[2rem]'}`}>{tab}</h1>
                   <p className="mt-1.5 text-sm text-muted">{pageDescriptions[tab]}</p>
                 </div>
-                <Button variant="primary" className="inline-flex shrink-0" onClick={() => setAddKind('expense')}>
+                <Button variant="primary" className="inline-flex w-full shrink-0 sm:w-auto" onClick={() => setAddKind('expense')}>
                   + Add transaction
                 </Button>
               </div>

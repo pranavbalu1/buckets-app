@@ -28,7 +28,7 @@ export function applyEvent(b: Balances, e: LedgerEvent): void {
       b.unallocated += amt
       break
     case 'allocation': {
-      // direction 'out' returns money from the bucket to the unallocated pool (Rain)
+      // direction 'out' returns money from the bucket to the unallocated pool.
       const sign = e.direction === 'out' ? -1 : 1
       b.unallocated -= sign * amt
       add(b.buckets, need(e.bucketId, 'bucketId'), sign * amt)

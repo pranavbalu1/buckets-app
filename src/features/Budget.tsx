@@ -1,22 +1,22 @@
 import { useMemo, useState } from 'react'
 import type { DragEvent } from 'react'
-import { ArrowDown, ArrowUp, Check, ChevronDown, GripVertical, Plus, Sparkles, Users } from 'lucide-react'
+import { ArrowDown, ArrowUp, Check, ChevronDown, CircleDollarSign, GripVertical, Plus, ReceiptText, Users } from 'lucide-react'
 import { Button, Card, List, Modal, ProgressBar, Skeleton, Tile, TileBoard } from '../components'
 import type { ListItemData } from '../components'
 import Money from '../app/components/Money'
 import { computeBalances } from '../domain/balances'
-import { computeMonthBudget, maxAllocatable, maxReturnable, planRain } from '../domain/budget'
+import { computeMonthBudget, maxAllocatable, maxReturnable, planExpenseCoverage, planSavingsFunding } from '../domain/budget'
 import type { BucketMonth } from '../domain/budget'
 import { addMonths, currentMonth, dateLabel, monthLabel, todayString } from '../domain/dates'
 import { makeEvent } from '../domain/events'
 import { centsToInput, formatCents, parseDollars, parseSignedDollars } from '../domain/money'
-import { BUCKET_KIND_LABELS, bucketColor } from '../domain/models'
+import { BUCKET_KIND_LABELS, bucketColor, isExpenseBucket, isSavingsBucket } from '../domain/models'
 import type { Bucket, BucketGroup } from '../domain/models'
 import { useLedger } from '../storage/store'
 import BudgetEditor from './BudgetEditor'
 
 type Dialog =
-  | { kind: 'rain' }
+  | { kind: 'cover-expenses' | 'fund-savings' }
   | { kind: 'editor'; target: { type: 'bucket'; value?: Bucket } | { type: 'group'; value?: BucketGroup } }
   | null
 
@@ -38,7 +38,7 @@ export default function Budget() {
   const [dragPlacement, setDragPlacement] = useState<'before' | 'after'>('before')
 
   const budget = useMemo(
-    () => computeMonthBudget(events, buckets.map((b) => b.id), month),
+    () => computeMonthBudget(events, buckets, month),
     [events, buckets, month],
   )
   const bank = useMemo(() => {
@@ -68,7 +68,7 @@ export default function Budget() {
     { key: 'none', title: 'Ungrouped', group: null, items: shown.filter((b) => !b.groupId) },
   ].filter((s) => s.group !== null || s.items.length > 0)
 
-  const totalWant = buckets.filter((b) => !b.archived).reduce((s, b) => s + b.monthlyTargetCents, 0)
+  const totalWant = buckets.filter((b) => !b.archived && isExpenseBucket(b)).reduce((s, b) => s + b.monthlyTargetCents, 0)
   const rain = budget.unallocatedCents
   const toggle = (key: string) => setCollapsed((c) => ({ ...c, [key]: !c[key] }))
   const toggleBucketDetails = (key: string) => setExpandedBuckets((state) => ({ ...state, [key]: !state[key] }))
@@ -198,7 +198,7 @@ export default function Budget() {
     endDrag()
   }
 
-  /** Positive cents put money in from Rain; negative takes it back. Returns an error message or null. */
+  /** Positive cents assign money; negative cents return it to the unallocated pool. */
   async function moveInOut(bucket: Bucket, cents: number): Promise<string | null> {
     if (cents > 0) {
       const max = maxAllocatable(events, month)
@@ -215,7 +215,7 @@ export default function Budget() {
         amountCents: Math.abs(cents),
         bucketId: bucket.id,
         direction: cents < 0 ? 'out' : null,
-        description: cents < 0 ? 'Returned to Rain' : 'Assigned',
+        description: cents < 0 ? 'Returned to unallocated' : 'Assigned to bucket',
       }),
     )
     return ok ? null : 'Could not save'
@@ -226,15 +226,14 @@ export default function Budget() {
       <TileBoard page="budget" className="grid grid-cols-1 gap-3">
       <Tile id="budget-summary" label="Budget totals">
       <Card className="flex flex-wrap items-center gap-x-6 gap-y-2 p-3 shadow-md backdrop-blur-xl 2xl:sticky 2xl:top-2 2xl:z-10">
-        <Figure label="Rain · unassigned" cents={rain} big accent={rain >= 0} />
+        <Figure label="Unallocated · available to assign" cents={rain} big accent={rain >= 0} />
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-3">
           <Figure label="Income" cents={budget.incomeCents} />
-          <span className="text-muted">−</span>
-          <Figure label="Spending" cents={budget.spentCents} />
-          <span className="text-muted">=</span>
-          <Figure label="Income after spending" cents={budget.incomeCents - budget.spentCents} />
+          <Figure label="Planned" cents={budget.plannedCents} />
+          <Figure label="Spent" cents={budget.spentCents} />
+        <Figure label={budget.budgetVarianceCents < 0 ? 'Over plan' : budget.budgetVarianceCents > 0 ? 'Under plan' : 'On plan'} cents={Math.abs(budget.budgetVarianceCents)} tone={budget.budgetVarianceCents < 0 ? 'bad' : 'good'} />
         </div>
-        <Figure label="Net assigned" cents={budget.allocatedCents} />
+        <Figure label="Assigned" cents={budget.allocatedCents} />
         <Figure label="Net account balances" cents={bank} />
 
         <div className="ml-auto flex items-center gap-2">
@@ -254,12 +253,13 @@ export default function Budget() {
       <Tile id="budget-actions" label="Budget actions and display options">
       <div>
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="primary" onClick={() => setDialog({ kind: 'rain' })}><Sparkles className="size-4" /> Make it rain!</Button>
+        <Button variant="primary" onClick={() => setDialog({ kind: 'cover-expenses' })}><ReceiptText className="size-4" /> Cover expenses</Button>
+        {buckets.some((bucket) => !bucket.archived && isSavingsBucket(bucket)) && <Button variant="secondary" onClick={() => setDialog({ kind: 'fund-savings' })}><CircleDollarSign className="size-4" /> Fund savings goals</Button>}
         <Button variant="secondary" onClick={() => setDialog({ kind: 'editor', target: { type: 'bucket' } })}><Plus className="size-4" /> New bucket</Button>
         <Button variant="secondary" onClick={() => setDialog({ kind: 'editor', target: { type: 'group' } })}><Users className="size-4" /> New group</Button>
         <div className="ml-1 rounded-lg bg-sunken/60 px-3 py-2 text-xs sm:ml-2 sm:text-sm">
           <span className="font-semibold tabular-nums">{formatCents(totalWant)}</span>{' '}
-          <span className="text-muted">total monthly wants</span>
+          <span className="text-muted">planned monthly expenses</span>
         </div>
         <label className="ml-auto flex cursor-pointer items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-xs font-medium text-muted transition hover:bg-sunken/70 hover:text-ink">
           <input
@@ -297,9 +297,11 @@ export default function Budget() {
         const sum = (getValue: (bucket: Bucket) => number) =>
           section.items.reduce((total, bucket) => total + getValue(bucket), 0)
         const groupAvailable = sum(availableOf)
-        const groupWant = sum((bucket) => bucket.monthlyTargetCents)
+        const groupWant = sum((bucket) => isExpenseBucket(bucket) ? bucket.monthlyTargetCents : 0)
         const groupFunded = sum(inOf)
-        const groupSpent = sum(spentOf)
+        const groupExpenseSpent = sum((bucket) => isExpenseBucket(bucket) ? spentOf(bucket) : 0)
+        const groupCovered = sum((bucket) => isExpenseBucket(bucket) ? rows.get(bucket.id)?.coveredCents ?? 0 : 0)
+        const groupUncovered = sum((bucket) => isExpenseBucket(bucket) ? rows.get(bucket.id)?.uncoveredCents ?? 0 : 0)
         const listItems: ListItemData[] = section.items.map((bucket) => ({
           id: bucket.id,
           title: bucket.name,
@@ -400,16 +402,19 @@ export default function Budget() {
                 </div>
 
                 <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                  <span>Want <strong className="font-semibold text-ink">{formatCents(groupWant)}</strong></span>
-                  <span>Funded <strong className="font-semibold text-ink">{formatCents(groupFunded)}</strong></span>
-                  <span>Spent <strong className="font-semibold text-ink">{formatCents(groupSpent)}</strong></span>
+                  <span>Planned <strong className="font-semibold text-ink">{formatCents(groupWant)}</strong></span>
+                  <span>Assigned <strong className="font-semibold text-ink">{formatCents(groupFunded)}</strong></span>
+                  <span>Spent <strong className="font-semibold text-ink">{formatCents(groupExpenseSpent)}</strong></span>
+                  <span>Covered <strong className="font-semibold text-ink">{formatCents(groupCovered)}</strong></span>
+                  {groupUncovered > 0 && <span className="text-bad">Needs coverage <strong className="font-semibold">{formatCents(groupUncovered)}</strong></span>}
+                  <span className={groupWant - groupExpenseSpent < 0 ? 'text-bad' : ''}>{groupWant - groupExpenseSpent < 0 ? 'Over plan' : groupWant - groupExpenseSpent > 0 ? 'Under plan' : 'On plan'} <strong className="font-semibold text-ink">{formatCents(Math.abs(groupWant - groupExpenseSpent))}</strong></span>
                 </div>
                 {!isCollapsed && section.items.length > 0 && (
                   <div className={`${budgetGridColumns} mt-2 hidden border-y border-border/80 bg-sunken/35 px-2 py-1.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground 2xl:grid`}>
                     <span>Bucket</span>
                     <span>Balance</span>
                     <span>In / Out</span>
-                    <span>Want</span>
+                    <span>Planned / target</span>
                     <span className="px-2">Activity</span>
                     <span className="text-right">Details</span>
                   </div>
@@ -480,9 +485,9 @@ export default function Budget() {
                       <p className={`truncate text-sm font-semibold tabular-nums ${available < 0 ? 'text-bad' : ''}`}><Money cents={available} /></p>
                       {!isExpanded && <p
                         className="truncate text-[11px] leading-4 text-muted-foreground"
-                        title={`Opening ${formatCents(bucketMonth?.carryoverCents ?? 0)} · Net funded ${formatCents(funded)}`}
+                        title={`Opening ${formatCents(bucketMonth?.carryoverCents ?? 0)} · Assigned ${formatCents(funded)}`}
                       >
-                        Open {formatCents(bucketMonth?.carryoverCents ?? 0)} · Funded {formatCents(funded)}
+                        Open {formatCents(bucketMonth?.carryoverCents ?? 0)} · Assigned {formatCents(funded)}
                       </p>}
                     </div>
                     <div className="min-w-0">
@@ -492,20 +497,29 @@ export default function Budget() {
                         : <span className="text-xs text-muted-foreground">Archived</span>}
                     </div>
                     <div className="min-w-0">
-                      <span className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-muted-foreground 2xl:hidden">Monthly want</span>
+                      <span className="mb-0.5 block text-[10px] font-medium uppercase tracking-wide text-muted-foreground 2xl:hidden">{isExpenseBucket(bucket) ? 'Planned' : 'Contribution'}</span>
                       <WantCell key={bucket.id + '-' + bucket.monthlyTargetCents} bucket={bucket} />
                     </div>
                     {!isExpanded && <div className="col-span-2 min-w-0 space-y-1 2xl:col-span-1 2xl:px-2">
                       <span className="block text-[10px] font-medium uppercase tracking-wide text-muted-foreground 2xl:hidden">Activity</span>
-                      {bucket.monthlyTargetCents > 0 ? (
-                        <div title={`Spent ${formatCents(spent)} · ${formatCents(funded)} funded of ${formatCents(bucket.monthlyTargetCents)}`}>
+                      {isExpenseBucket(bucket) ? (
+                        <div title={`Planned ${formatCents(bucket.monthlyTargetCents)} · Spent ${formatCents(spent)} · Covered ${formatCents(bucketMonth?.coveredCents ?? 0)} · Uncovered ${formatCents(bucketMonth?.uncoveredCents ?? 0)}`}>
                           <p className="truncate text-[11px] leading-4 tabular-nums">
                             <span className="text-muted-foreground">Spent </span>{formatCents(spent)}
-                            <span className="text-muted-foreground"> · Funded </span>{formatCents(funded)} / {formatCents(bucket.monthlyTargetCents)}
+                            <span className="text-muted-foreground"> · Covered </span>{formatCents(bucketMonth?.coveredCents ?? 0)}
                           </p>
-                          <ProgressBar pct={(funded / bucket.monthlyTargetCents) * 100} over={funded > bucket.monthlyTargetCents} color={bucketColor(bucket)} />
+                          {spent > 0 && <ProgressBar pct={(bucketMonth?.coveredCents ?? 0) / spent * 100} over={(bucketMonth?.uncoveredCents ?? 0) > 0} color={bucketColor(bucket)} />}
+                          <p className={`truncate text-[10px] ${bucketMonth && bucketMonth.varianceCents < 0 ? 'text-bad' : 'text-muted-foreground'}`}>
+                            {bucketMonth?.uncoveredCents ? `${formatCents(bucketMonth.uncoveredCents)} needs coverage` : bucketMonth && bucketMonth.varianceCents < 0 ? `${formatCents(-bucketMonth.varianceCents)} over plan` : `${formatCents(bucket.monthlyTargetCents)} planned`}
+                          </p>
                         </div>
-                      ) : <p className="truncate text-[11px] text-muted-foreground">Spent {formatCents(spent)} · No want set</p>}
+                      ) : bucket.monthlyTargetCents > 0 ? (
+                        <div title={`Savings assigned ${formatCents(funded)} of ${formatCents(bucket.monthlyTargetCents)} monthly contribution target`}>
+                          <p className="truncate text-[11px] leading-4 tabular-nums"><span className="text-muted-foreground">Assigned </span>{formatCents(funded)} / {formatCents(bucket.monthlyTargetCents)}</p>
+                          <ProgressBar pct={(funded / bucket.monthlyTargetCents) * 100} over={funded > bucket.monthlyTargetCents} color={bucketColor(bucket)} />
+                          <p className="truncate text-[10px] text-muted-foreground">Savings contribution target</p>
+                        </div>
+                      ) : <p className="truncate text-[11px] text-muted-foreground">Spent {formatCents(spent)} · No monthly target</p>}
                     </div>}
                     {isExpanded && <span className="hidden 2xl:block" aria-hidden="true" />}
                     <div className="col-span-2 flex items-center justify-between gap-2 2xl:col-span-1 2xl:justify-end">
@@ -558,7 +572,7 @@ export default function Budget() {
         )
       })}
       </TileBoard>
-      {dialog?.kind === 'rain' && <RainDialog month={month} onClose={() => setDialog(null)} />}
+      {(dialog?.kind === 'cover-expenses' || dialog?.kind === 'fund-savings') && <FundingDialog month={month} purpose={dialog.kind} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'editor' && (
         <div className="card p-4">
           <BudgetEditor key={dialog.target.value?.id ?? 'new'} target={dialog.target} onClose={() => setDialog(null)} />
@@ -632,6 +646,7 @@ function BucketBreakdown({ bucket, row, month, groupName }: {
   const projectedAtTarget = row.availableCents + futureDeposits * bucket.monthlyTargetCents
   const targetDatePassed = Boolean(bucket.targetDate && targetMonthIndex < selectedMonthIndex)
 
+  const expenseBucket = isExpenseBucket(bucket)
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -642,7 +657,14 @@ function BucketBreakdown({ bucket, row, month, groupName }: {
         <p className="text-xs text-muted">Net funded includes assignments and bucket moves.</p>
       </div>
 
-      <dl className="grid gap-2 sm:grid-cols-2 xl:grid-cols-6">
+      <dl className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
+        <BreakdownValue label={expenseBucket ? 'Planned' : 'Monthly contribution target'} cents={expenseBucket ? row.plannedCents : bucket.monthlyTargetCents} />
+        <BreakdownValue label="Spent" cents={row.spentCents} />
+        {expenseBucket ? <>
+          <BreakdownValue label="Covered" cents={row.coveredCents} />
+          <BreakdownValue label="Uncovered" cents={row.uncoveredCents} />
+          <BreakdownValue label={row.varianceCents < 0 ? 'Over plan' : 'Under plan'} cents={Math.abs(row.varianceCents)} />
+        </> : <BreakdownValue label="Assigned this month" cents={netFunding} />}
         <BreakdownValue label="Carryover" cents={row.carryoverCents} />
         <BreakdownValue label="Assigned" cents={row.allocatedCents} />
         <BreakdownValue label="Moved in" cents={row.movedInCents} />
@@ -658,19 +680,18 @@ function BucketBreakdown({ bucket, row, month, groupName }: {
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-xl border border-foreground/20 bg-surface p-3">
           <div className="flex items-start justify-between gap-3">
-            <div><p className="text-xs font-medium text-muted">Monthly want</p><p className="mt-1 text-lg font-semibold tabular-nums">{formatCents(bucket.monthlyTargetCents)}</p></div>
-            <div className="text-right"><p className="text-xs text-muted">Net funded</p><p className="mt-1 text-sm font-semibold tabular-nums">{formatCents(netFunding)}</p></div>
+            <div><p className="text-xs font-medium text-muted">{expenseBucket ? 'Planned spending' : 'Monthly contribution target'}</p><p className="mt-1 text-lg font-semibold tabular-nums">{formatCents(bucket.monthlyTargetCents)}</p></div>
+            <div className="text-right"><p className="text-xs text-muted">{expenseBucket ? 'Actual spending' : 'Assigned this month'}</p><p className="mt-1 text-sm font-semibold tabular-nums">{formatCents(expenseBucket ? row.spentCents : netFunding)}</p></div>
           </div>
-          {bucket.monthlyTargetCents > 0 ? <>
-            <ProgressBar pct={netFunding / bucket.monthlyTargetCents * 100} over={netFunding > bucket.monthlyTargetCents} color={bucketColor(bucket)} />
-            <p className="mt-1 text-xs text-muted">
-              {netFunding > bucket.monthlyTargetCents
-                ? `${formatCents(netFunding - bucket.monthlyTargetCents)} over want`
-                : netFunding === bucket.monthlyTargetCents
-                  ? 'Fully funded'
-                  : `${formatCents(bucket.monthlyTargetCents - netFunding)} left to fund`}
+          {expenseBucket ? <>
+            <ProgressBar pct={row.spentCents > 0 ? row.coveredCents / row.spentCents * 100 : 0} over={row.uncoveredCents > 0} color={bucketColor(bucket)} />
+            <p className={`mt-1 text-xs ${row.varianceCents < 0 ? 'text-bad' : 'text-muted'}`}>
+              {row.uncoveredCents > 0 ? `${formatCents(row.uncoveredCents)} of spending still needs coverage` : row.varianceCents < 0 ? `${formatCents(-row.varianceCents)} over plan` : row.varianceCents > 0 ? `${formatCents(row.varianceCents)} under plan` : 'On plan'}
             </p>
-          </> : <p className="mt-2 text-xs text-muted">Set a monthly want to track how much you plan to fund this bucket.</p>}
+          </> : bucket.monthlyTargetCents > 0 ? <>
+            <ProgressBar pct={netFunding / bucket.monthlyTargetCents * 100} over={netFunding > bucket.monthlyTargetCents} color={bucketColor(bucket)} />
+            <p className="mt-1 text-xs text-muted">{netFunding > bucket.monthlyTargetCents ? `${formatCents(netFunding - bucket.monthlyTargetCents)} above target` : netFunding === bucket.monthlyTargetCents ? 'Contribution target met' : `${formatCents(bucket.monthlyTargetCents - netFunding)} left to assign`}</p>
+          </> : <p className="mt-2 text-xs text-muted">Set a monthly contribution target for this savings goal.</p>}
         </div>
 
         {hasGoal ? <div className="rounded-xl border border-foreground/20 bg-surface p-3">
@@ -711,16 +732,17 @@ function monthIndex(month: string) {
   return year * 12 + monthNumber - 1
 }
 
-function Figure({ label, cents, big = false, accent = false }: {
+function Figure({ label, cents, big = false, accent = false, tone }: {
   label: string
   cents: number
   big?: boolean
   accent?: boolean
+  tone?: 'good' | 'bad'
 }) {
   return (
     <div>
       <div className={`${big ? 'text-xl sm:text-2xl' : 'text-base sm:text-lg'} font-semibold`}>
-        <Money cents={cents} className={accent ? 'text-accent' : ''} />
+        <Money cents={cents} className={tone === 'bad' ? 'text-bad' : tone === 'good' || accent ? 'text-good' : ''} />
       </div>
       <div className="text-xs text-muted">{label}</div>
     </div>
@@ -754,7 +776,7 @@ function InOutCell({ name, onSubmit }: { name: string; onSubmit: (cents: number)
       <div className="flex items-center gap-1">
         <input
           aria-label={`Put in or take out of ${name}`}
-          title="Enter a positive amount to assign from Rain, or a negative amount to return to Rain."
+          title="Enter a positive amount to assign, or a negative amount to return to available money."
           className="min-h-10 min-w-0 flex-1 rounded-md border border-foreground/20 bg-surface px-2 py-2 text-right text-sm tabular-nums outline-none placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent/25 2xl:min-h-0 2xl:py-1"
           inputMode="decimal"
           autoComplete="off"
@@ -789,7 +811,7 @@ function WantCell({ bucket }: { bucket: Bucket }) {
     const trimmed = value.trim()
     const cents = trimmed === '' ? 0 : parseDollars(trimmed)
     if (cents === null) {
-      setError('Enter a valid amount, such as 300 or 12.50.')
+      setError('Enter a valid monthly target, such as 300 or 12.50.')
       return
     }
     if (cents === bucket.monthlyTargetCents) {
@@ -797,7 +819,7 @@ function WantCell({ bucket }: { bucket: Bucket }) {
       return
     }
     const saved = await updateBucket(bucket.id, { monthlyTargetCents: cents })
-    setError(saved ? '' : useLedger.getState().error ?? 'Could not update the monthly want.')
+      setError(saved ? '' : useLedger.getState().error ?? 'Could not update the monthly target.')
   }
 
   return (
@@ -805,9 +827,9 @@ function WantCell({ bucket }: { bucket: Bucket }) {
       <div className={`flex min-h-10 min-w-0 items-center justify-end gap-0.5 rounded-md border bg-surface px-1.5 py-0.5 transition-colors hover:border-muted focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/25 2xl:min-h-0 ${error ? 'border-bad/60' : 'border-foreground/20'}`}>
         <span className="text-xs text-muted" aria-hidden>$</span>
         <input
-          aria-label={`Monthly want for ${bucket.name}`}
+          aria-label={`${isExpenseBucket(bucket) ? 'Planned monthly spending' : 'Monthly contribution target'} for ${bucket.name}`}
           aria-invalid={Boolean(error)}
-          title="Edit the monthly want. Press Enter or leave the field to save."
+          title="Edit the monthly plan or contribution target. Press Enter or leave the field to save."
           className="w-[4.5rem] min-w-0 bg-transparent py-2 text-right text-sm tabular-nums outline-none placeholder:text-muted/70 2xl:py-0.5"
           inputMode="decimal"
           placeholder="0.00"
@@ -822,16 +844,17 @@ function WantCell({ bucket }: { bucket: Bucket }) {
   )
 }
 
-function RainDialog({ month, onClose }: { month: string; onClose: () => void }) {
+function FundingDialog({ month, purpose, onClose }: { month: string; purpose: 'cover-expenses' | 'fund-savings'; onClose: () => void }) {
   const buckets = useLedger((s) => s.buckets)
   const events = useLedger((s) => s.events)
   const addEvents = useLedger((s) => s.addEvents)
   const [busy, setBusy] = useState(false)
 
-  const plan = useMemo(
-    () => planRain(events, buckets.filter((b) => !b.archived), month),
-    [events, buckets, month],
-  )
+  const coveringExpenses = purpose === 'cover-expenses'
+  const plan = useMemo(() => coveringExpenses
+    ? planExpenseCoverage(events, buckets, month)
+    : planSavingsFunding(events, buckets.filter((bucket) => !bucket.archived && isSavingsBucket(bucket)), month),
+  [events, buckets, month, coveringExpenses])
   const nameOf = (id: string) => buckets.find((b) => b.id === id)?.name ?? '—'
 
   async function confirm() {
@@ -844,7 +867,7 @@ function RainDialog({ month, onClose }: { month: string; onClose: () => void }) 
           month: `${month}-01`,
           amountCents: s.cents,
           bucketId: s.bucketId,
-          description: 'Make it rain',
+          description: coveringExpenses ? 'Expense coverage' : 'Savings contribution',
         }),
       ),
     )
@@ -853,14 +876,23 @@ function RainDialog({ month, onClose }: { month: string; onClose: () => void }) 
   }
 
   return (
-    <Modal title={`Make it rain · ${monthLabel(month)}`} onClose={onClose}>
+    <Modal title={`${coveringExpenses ? 'Cover expenses' : 'Fund savings goals'} · ${monthLabel(month)}`} onClose={onClose}>
       {plan.steps.length === 0 ? (
-        <p className="text-sm text-muted">
-          Nothing to hand out. Either there is no Rain right now, or every bucket already has its Want for
-          this month. Set a Want on each bucket first if you haven't.
-        </p>
+        <div className="space-y-3 text-sm text-muted">
+          <p>{plan.shortfallCents > 0
+            ? coveringExpenses
+              ? `${formatCents(plan.shortfallCents)} of recorded expenses still need coverage, but there is no available money to assign right now.`
+              : `${formatCents(plan.shortfallCents)} of savings contribution targets remain, but there is no available money to assign right now.`
+            : coveringExpenses
+              ? 'All recorded expenses are already covered, or there are no expenses assigned to expense buckets for this month. Planned amounts alone are not assigned.'
+              : 'No savings contribution targets need funding this month. You can still assign money to a savings goal directly from its bucket.'}</p>
+          <button className="btn" onClick={onClose}>Close</button>
+        </div>
       ) : (
         <div className="space-y-4">
+          <p className="text-sm text-muted">{coveringExpenses
+            ? 'Assigns only the uncovered amounts of recorded expenses. This can exceed a bucket’s plan and won’t fund unused targets.'
+            : 'Assigns money to configured savings contribution targets. Expense buckets are not included.'}</p>
           <ul className="divide-y divide-line rounded-lg border border-line text-sm">
             {plan.steps.map((s) => (
               <li key={s.bucketId} className="flex justify-between px-3 py-2">
@@ -875,13 +907,12 @@ function RainDialog({ month, onClose }: { month: string; onClose: () => void }) 
           </ul>
           {plan.shortfallCents > 0 && (
             <p className="text-sm text-bad">
-              Not enough Rain to cover every Want. Short by {formatCents(plan.shortfallCents)}. Buckets are
-              filled in the order shown on the Budget screen.
+              Available money is short by {formatCents(plan.shortfallCents)}. Items are handled in the order shown on the Budget screen.
             </p>
           )}
           <div className="flex gap-2">
             <button className="btn btn-primary" disabled={busy} onClick={confirm}>
-              {busy ? 'Saving…' : 'Make it so'}
+              {busy ? 'Saving…' : coveringExpenses ? 'Cover listed expenses' : 'Assign savings contributions'}
             </button>
             <button className="btn" onClick={onClose}>Cancel</button>
           </div>

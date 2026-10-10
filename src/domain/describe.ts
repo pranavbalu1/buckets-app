@@ -20,8 +20,8 @@ export function describeEvent(e: LedgerEvent, account: NameOf, bucket: NameOf): 
     case 'allocation': {
       const month = e.month?.slice(0, 7) ?? ''
       return e.direction === 'out'
-        ? `${bucket(e.bucketId)} → Rain (${month})`
-        : `Rain → ${bucket(e.bucketId)} (${month})`
+        ? `${bucket(e.bucketId)} → Available to assign (${month})`
+        : `Available to assign → ${bucket(e.bucketId)} (${month})`
     }
     case 'bucket_move':
       return `${bucket(e.bucketId)} → ${bucket(e.toBucketId)}`

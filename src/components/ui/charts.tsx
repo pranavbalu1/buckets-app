@@ -91,7 +91,7 @@ export interface BudgetGaugeGraphProps extends React.HTMLAttributes<HTMLDivEleme
   subtitle?: string
 }
 
-/** A semicircle budget gauge with explicit spent, budget, and remaining totals. */
+/** A semicircle budget gauge comparing actual spending with a planned expense amount. */
 export function BudgetGaugeGraph({
   title,
   budgetCents,
@@ -108,7 +108,7 @@ export function BudgetGaugeGraph({
   const categories: SpendingCategory[] = [
     { label: 'Spent', percentage: usedPercent, amount: formatCurrency(safeSpent), color: overspent > 0 ? 'var(--color-chart-6)' : 'var(--color-chart-1)' },
     {
-      label: overspent > 0 ? 'Over budget' : 'Remaining',
+      label: overspent > 0 ? 'Over plan' : remaining > 0 ? 'Remaining' : 'On plan',
       percentage: 100 - usedPercent,
       amount: formatCurrency(overspent || remaining),
       color: overspent > 0 ? 'var(--color-chart-6)' : 'var(--color-chart-2)',
@@ -118,17 +118,19 @@ export function BudgetGaugeGraph({
   return (
     <div className={cn('min-w-0', className)} {...props}>
       <SemiGaugeGraph title={title} subtitle={subtitle} amount={formatCurrency(safeSpent)} categories={categories} />
-      <div className="mt-2 grid grid-cols-2 gap-2 rounded-xl border border-border/60 bg-card px-4 py-3 text-xs">
+        <div className="mt-2 grid grid-cols-3 gap-2 rounded-xl border border-border/60 bg-card px-3 py-3 text-xs">
         <div className="min-w-0">
-          <span className="block text-muted-foreground">Budget</span>
+          <span className="block text-muted-foreground">Planned</span>
           <strong className="mt-0.5 block truncate tabular-nums">{formatCurrency(safeBudget)}</strong>
-        </div>
-        <div
-          className="min-w-0 text-right"
-        >
-          <span className="block text-muted-foreground">{overspent ? 'Over budget' : 'Remaining'}</span>
-          <strong className={cn('mt-0.5 block truncate tabular-nums', overspent > 0 && 'text-destructive')}>
-            {formatCurrency(overspent || remaining)}
+          </div>
+          <div className="min-w-0 text-center">
+            <span className="block text-muted-foreground">Spent</span>
+            <strong className="mt-0.5 block truncate tabular-nums">{formatCurrency(safeSpent)}</strong>
+          </div>
+          <div className="min-w-0 text-right">
+          <span className="block text-muted-foreground">{overspent ? 'Over plan' : remaining > 0 ? 'Remaining' : 'On plan'}</span>
+            <strong className={cn('mt-0.5 block truncate tabular-nums', overspent > 0 ? 'text-bad' : remaining > 0 ? 'text-good' : '')}>
+              {formatCurrency(overspent || remaining)}
           </strong>
         </div>
       </div>
@@ -163,6 +165,7 @@ export interface StackedBarGraphProps extends React.HTMLAttributes<HTMLDivElemen
   timeframeOptions?: string[];
   defaultTimeframe?: string;
   onTimeframeChange?: (timeframe: string) => void;
+  headerContent?: React.ReactNode;
   cornerRadius?: string | number;
   onActionClick?: () => void;
 }
@@ -176,6 +179,7 @@ export function StackedBarGraph({
   timeframeOptions = ['Monthly', 'Quarterly', 'Yearly'],
   defaultTimeframe = 'Monthly',
   onTimeframeChange,
+  headerContent,
   cornerRadius = 4,
   onActionClick,
   ...props
@@ -247,7 +251,8 @@ export function StackedBarGraph({
         col.segments.reduce((acc, s) => acc + s.value, 0),
       ),
     );
-    return Math.max(highestTotal * 1.25, 1000);
+    // Leave enough room above the tallest stack for its total and hover marker.
+    return Math.max(highestTotal * 1.4, 1000);
   }, [activeData]);
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -312,9 +317,10 @@ export function StackedBarGraph({
         })()}
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h3 className="text-lg font-bold tracking-tight text-foreground sm:text-xl">{title}</h3>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+          {headerContent}
           <div className="relative" ref={dropdownRef}>
             <button
               type="button"
@@ -752,6 +758,7 @@ export function SemiGaugeGraph({
 export interface LinePoint {
   label: string;
   value: number;
+  planned?: number;
 }
 
 export interface AreaLineGraphProps extends React.HTMLAttributes<HTMLDivElement> {
@@ -781,7 +788,7 @@ export function AreaLineGraph({
   const [cursorPos, setCursorPos] = React.useState<{ x: number; y: number } | null>(null);
   const gradientId = React.useId().replaceAll(':', '');
 
-  const values = data.map((d) => d.value);
+  const values = data.flatMap((d) => d.planned === undefined ? [d.value] : [d.value, d.planned]);
   const minVal = Math.min(...(values.length ? values : [0])) * 0.95;
   const maxVal = Math.max(...(values.length ? values : [100])) * 1.05;
 
@@ -793,9 +800,8 @@ export function AreaLineGraph({
     if (!data.length) return [];
     return data.map((pt, i) => {
       const x = data.length > 1 ? (i / (data.length - 1)) * width : width / 2;
-      const normalizedY = (pt.value - minVal) / (maxVal - minVal || 1);
-      const y = height - paddingY - normalizedY * (height - 2 * paddingY);
-      return { x, y, ...pt };
+      const yFor = (value: number) => height - paddingY - ((value - minVal) / (maxVal - minVal || 1)) * (height - 2 * paddingY);
+      return { x, y: yFor(pt.value), plannedY: pt.planned === undefined ? undefined : yFor(pt.planned), ...pt };
     });
   }, [data, minVal, maxVal]);
 
@@ -812,6 +818,11 @@ export function AreaLineGraph({
     if (!points.length) return '';
     return `${lineD} L ${width} ${height} L 0 ${height} Z`;
   }, [lineD, points]);
+
+  const plannedLineD = React.useMemo(() => points.reduce((acc, pt, index) => {
+    if (pt.plannedY === undefined) return acc;
+    return index === 0 || !acc ? `M ${pt.x} ${pt.plannedY}` : `${acc} L ${pt.x} ${pt.plannedY}`;
+  }, ''), [points]);
 
   const currentHovered =
     hoveredIdx !== null ? points[hoveredIdx] : points[points.length - 1];
@@ -855,6 +866,9 @@ export function AreaLineGraph({
           <span className="text-xs text-muted-foreground ml-2 font-medium">
             {currentHovered.label}
           </span>
+        )}
+        {currentHovered?.planned !== undefined && (
+          <span className="ml-3 text-xs text-muted-foreground">Planned {currencyPrefix}{currentHovered.planned.toLocaleString()}</span>
         )}
       </div>
 
@@ -909,6 +923,17 @@ export function AreaLineGraph({
             strokeLinejoin="round"
           />
 
+          {plannedLineD && <path
+            d={plannedLineD}
+            fill="none"
+            stroke="var(--color-chart-2)"
+            strokeWidth="2"
+            strokeDasharray="6 5"
+            vectorEffect="non-scaling-stroke"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />}
+
           {/* Crosshair Vertical Guide */}
           {hoveredIdx !== null && points[hoveredIdx] && (
             <line
@@ -958,6 +983,11 @@ export function AreaLineGraph({
             />
           ))}
         </div>
+
+        {data.some((point) => point.planned !== undefined) && <div className="mt-1 flex justify-end gap-4 text-[11px] text-muted-foreground">
+          <span className="inline-flex items-center gap-1.5"><i className="size-2 rounded-full" style={{ backgroundColor: strokeColor }} /> Actual</span>
+          <span className="inline-flex items-center gap-1.5"><i className="h-0.5 w-3 border-t-2 border-dashed" style={{ borderColor: 'var(--color-chart-2)' }} /> Planned pace</span>
+        </div>}
       </div>
     </div>
   );

@@ -157,8 +157,9 @@ amount of money.
 
 The **Dashboard** provides a quick view of the selected month:
 
-- Available money and budget progress.
-- Income, spending, and savings totals.
+- Unallocated money available to assign.
+- Planned expense targets compared with actual spending and variance.
+- Expense coverage and savings contributions.
 - Recent activity.
 - Cash-flow bars.
 - Shortcuts to add a transaction, review the budget, or manage accounts.
@@ -172,21 +173,29 @@ The **Budget** page is where you give every dollar a job.
 
 For the selected month:
 
-- Review income, allocations, spending, and available money.
+- Review income, planned expenses, actual spending, budget variance, and unallocated money separately.
+- Use **Cover expenses** to assign only the amount of recorded expense activity that is not already covered by assignments or bucket moves.
+- Coverage is based on actual expenses, can exceed the planned target, and is limited by money available to assign. Any shortfall remains visible as uncovered.
+- A positive variance means spending is under plan; a negative variance means spending is over plan. Variance is an analytical comparison, not cash available in an account.
 - Expand a bucket to see its month-end balance calculation.
-- Compare actual funding with the monthly target.
-- Review want shortfalls or overages.
+- Compare each expense bucket's plan, spending, coverage, uncovered amount, and variance.
 - Track savings-goal progress.
 - Review remaining amounts and target-date projections.
 - Use archived-bucket controls when you need to inspect older categories.
 
-Create or edit a bucket from the budget controls. Use allocation events to move
-money into or out of buckets; do not manually change derived balances.
+Create or edit a bucket from the budget controls. Use **Fund savings goals** or
+the bucket's assignment field for savings contributions and money intentionally
+reserved for future expenses. Expense targets guide spending; they do not move
+money automatically. Allocations and bucket moves change the budget ledger, not
+the bank account balance.
 
 ### Rollover
 
-Bucket balances can carry from one month to the next. Review the prior-month
-balance before allocating new income so you do not allocate money twice.
+Only money intentionally assigned to a bucket can roll over. Unused target
+amounts remain unallocated; for example, a $500 grocery plan with $400 in
+spending is covered by $400, leaving the unused $100 in the available-to-assign
+pool unless you explicitly assign it. Existing assigned balances continue to
+roll over and are not silently converted to cash surplus.
 
 ## Transactions
 
@@ -217,13 +226,18 @@ Available views include:
 - Spending by bucket.
 - Savings contributions and savings rate.
 - Largest expenses.
-- Total budget gauges.
+- Planned-versus-actual gauges with over-plan states.
 - A selected group budget gauge.
 - A selected bucket budget gauge.
 - Stacked activity bars.
 - Category and area-line charts.
-- A Sankey diagram showing how money moved from income through available money,
-  groups, buckets, spending, unspent balances, and unallocated money.
+- A Sankey diagram showing covered expense amounts by group and bucket, explicit
+  savings contributions, and uncovered expense totals. Planned targets do not
+  create flow values.
+
+Analytics keeps cash flow, budget performance, assignment, and coverage distinct:
+unallocated money is available to assign, budget variance is planned minus spent,
+and covered or uncovered amounts describe recorded expense coverage.
 
 Use group and bucket selectors to focus the budget gauges. Use the date range
 controls to compare different periods. Charts are derived from the same ledger

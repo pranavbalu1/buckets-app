@@ -1,9 +1,17 @@
 import { describe, expect, it } from 'vitest'
 import { computeBalances } from './balances'
-import { computeMonthBudget } from './budget'
+import { computeMonthBudget, planExpenseCoverage, planSavingsFunding } from './budget'
 import { ev } from './fixtures'
 
 const buckets = ['groc', 'ent']
+const income = (amountCents: number) => ev({ type: 'income', date: '2026-10-01', amountCents, accountId: 'chk' })
+const assign = (bucketId: string, amountCents: number) => ev({
+  type: 'allocation', date: '2026-10-02', month: '2026-10-01', amountCents, bucketId,
+})
+const expenseBuckets = [
+  { id: 'groc', kind: 'plain' as const, monthlyTargetCents: 50000, archived: false },
+  { id: 'ent', kind: 'recurring' as const, monthlyTargetCents: 20000, archived: false },
+]
 
 function ledger(sepSpend = 35000) {
   return [
@@ -59,5 +67,80 @@ describe('computeMonthBudget', () => {
     for (const row of budget.buckets) {
       expect(row.availableCents).toBe(balances.buckets[row.bucketId] ?? 0)
     }
+  })
+})
+
+describe('expense-first coverage', () => {
+  const spend = (bucketId: string, amountCents: number, date = '2026-10-12') =>
+    ev({ type: 'expense', date, amountCents, accountId: 'chk', bucketId })
+
+  it('covers $400 of a $500 target and keeps the unused target unallocated', () => {
+    const events = [income(50000), spend('groc', 40000)]
+    const plan = planExpenseCoverage(events, expenseBuckets, '2026-10')
+    expect(plan.steps).toEqual([{ bucketId: 'groc', cents: 40000 }])
+
+    const covered = [...events, ...plan.steps.map(({ bucketId, cents }) => assign(bucketId, cents))]
+    const month = computeMonthBudget(covered, expenseBuckets, '2026-10')
+    expect(month).toMatchObject({ plannedCents: 70000, spentCents: 40000, coverableSpentCents: 40000, budgetVarianceCents: 30000, unallocatedCents: 10000 })
+    expect(month.buckets.find((row) => row.bucketId === 'groc')).toMatchObject({
+      plannedCents: 50000, spentCents: 40000, coveredCents: 40000, uncoveredCents: 0, varianceCents: 10000, availableCents: 0,
+    })
+    expect(computeMonthBudget(covered, expenseBuckets, '2026-11').buckets.find((row) => row.bucketId === 'groc')?.carryoverCents).toBe(0)
+    expect(computeBalances(covered).accounts.chk).toBe(10000)
+  })
+
+  it('covers exact-plan and over-plan spending without capping at the target', () => {
+    const exact = computeMonthBudget([income(100000), spend('groc', 50000)], expenseBuckets, '2026-10')
+    expect(exact.buckets.find((row) => row.bucketId === 'groc')?.varianceCents).toBe(0)
+    expect(planExpenseCoverage([income(100000), spend('groc', 50000)], expenseBuckets, '2026-10').steps)
+      .toEqual([{ bucketId: 'groc', cents: 50000 }])
+
+    const events = [income(100000), spend('groc', 65000)]
+    const plan = planExpenseCoverage(events, expenseBuckets, '2026-10')
+    expect(plan.steps).toEqual([{ bucketId: 'groc', cents: 65000 }])
+    expect(computeMonthBudget(events, expenseBuckets, '2026-10').buckets.find((row) => row.bucketId === 'groc')?.varianceCents).toBe(-15000)
+  })
+
+  it('is idempotent and covers only newly uncovered later spending', () => {
+    const initial = [income(100000), spend('groc', 40000)]
+    const first = planExpenseCoverage(initial, expenseBuckets, '2026-10')
+    const applied = [...initial, ...first.steps.map(({ bucketId, cents }) => assign(bucketId, cents))]
+    expect(planExpenseCoverage(applied, expenseBuckets, '2026-10').steps).toEqual([])
+
+    const withNextExpense = [...applied, spend('groc', 10000, '2026-10-20')]
+    expect(planExpenseCoverage(withNextExpense, expenseBuckets, '2026-10').steps)
+      .toEqual([{ bucketId: 'groc', cents: 10000 }])
+  })
+
+  it('subtracts existing allocations and does not fund expense targets with no spending', () => {
+    const events = [income(100000), assign('groc', 25000), spend('groc', 40000)]
+    expect(planExpenseCoverage(events, expenseBuckets, '2026-10').steps)
+      .toEqual([{ bucketId: 'groc', cents: 15000 }])
+    expect(planExpenseCoverage([income(100000)], expenseBuckets, '2026-10').steps).toEqual([])
+  })
+
+  it('covers each bucket independently and excludes savings goals from expense coverage', () => {
+    const definitions = [
+      ...expenseBuckets,
+      { id: 'save', kind: 'save_by_deposit' as const, monthlyTargetCents: 10000, archived: false },
+    ]
+    const events = [income(100000), spend('groc', 30000), spend('ent', 25000), spend('save', 5000)]
+    const plan = planExpenseCoverage(events, definitions, '2026-10')
+    expect(plan.steps).toEqual([{ bucketId: 'groc', cents: 30000 }, { bucketId: 'ent', cents: 25000 }])
+    const summary = computeMonthBudget(events, definitions, '2026-10')
+    expect(summary).toMatchObject({ plannedCents: 70000, spentCents: 60000, budgetVarianceCents: 10000 })
+    expect(summary.buckets.find((row) => row.bucketId === 'save')).toMatchObject({ plannedCents: 0, varianceCents: 0 })
+  })
+
+  it('keeps explicit savings contribution funding available without expense activity', () => {
+    const plan = planSavingsFunding([income(30000)], [{ id: 'emergency', kind: 'save_by_deposit', monthlyTargetCents: 20000, archived: false }], '2026-10')
+    expect(plan.steps).toEqual([{ bucketId: 'emergency', cents: 20000 }])
+  })
+
+  it('keeps historical month totals independent from later transactions', () => {
+    const events = [income(100000), spend('groc', 40000, '2026-10-12')]
+    const before = computeMonthBudget(events, expenseBuckets, '2026-10')
+    const after = computeMonthBudget([...events, spend('groc', 50000, '2026-11-02')], expenseBuckets, '2026-10')
+    expect(after).toEqual(before)
   })
 })

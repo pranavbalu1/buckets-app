@@ -113,3 +113,12 @@
     transform: none;
   }
 }
+
+/* iOS Safari zooms the viewport when focused form controls use text below 16px. */
+@media (max-width: 767px) {
+  input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']):not([type='file']),
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
