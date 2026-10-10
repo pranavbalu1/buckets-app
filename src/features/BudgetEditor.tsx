@@ -73,8 +73,13 @@ function BucketForm({ bucket, onClose }: { bucket?: Bucket; onClose: () => void 
   }
 
   async function remove() {
-    if (!bucket || !window.confirm(`Delete “${bucket.name}”? This cannot be undone.`)) return
-    if (await removeBucket(bucket.id)) onClose()
+    if (!bucket || !window.confirm(`Permanently delete "${bucket.name}"? This also deletes its transaction and move history, recurring plans, and removes it from paycheck templates. This cannot be undone.`)) return
+    setBusy(true)
+    setError('')
+    const removed = await removeBucket(bucket.id)
+    setBusy(false)
+    if (removed) onClose()
+    else setError(useLedger.getState().error ?? 'Could not delete the bucket.')
   }
 
   return (
@@ -106,8 +111,8 @@ function BucketForm({ bucket, onClose }: { bucket?: Bucket; onClose: () => void 
         {error && <p className="text-sm text-bad" role="alert">{error}</p>}
         <div className="flex flex-wrap items-center gap-2">
           <button disabled={busy} className="btn btn-primary">{busy ? 'Saving…' : 'Save'}</button>
-          <button type="button" className="btn" onClick={onClose}>Cancel</button>
-          {bucket && <><button type="button" className="btn-link ml-auto" onClick={archive}>{bucket.archived ? 'Restore bucket' : 'Archive bucket'}</button><button type="button" className="btn-link text-bad" onClick={remove}>Delete</button></>}
+          <button type="button" className="btn" disabled={busy} onClick={onClose}>Cancel</button>
+          {bucket && <><button type="button" disabled={busy} className="btn-link ml-auto" onClick={archive}>{bucket.archived ? 'Restore bucket' : 'Archive bucket'}</button><button type="button" disabled={busy} className="btn-link text-bad" onClick={remove}>{busy ? 'Deleting…' : 'Delete permanently'}</button></>}
         </div>
       </form>
     </Modal>

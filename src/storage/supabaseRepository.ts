@@ -179,8 +179,13 @@ export const supabaseRepository: LedgerRepository = {
   },
 
   async deleteBucket(id) {
-    const { error } = await supabase.from('buckets').delete().eq('id', id)
-    if (error) fail(error)
+    const { error } = await supabase.rpc('delete_user_bucket', { p_bucket_id: id })
+    if (error) {
+      if (error.code === '42883' || error.message.includes('delete_user_bucket')) {
+        throw new Error('Bucket deletion is not enabled in the database yet. Apply supabase/migrations/013_delete_bucket_with_history.sql, then try again.')
+      }
+      fail(error)
+    }
   },
 
   async createEvent(event) {
