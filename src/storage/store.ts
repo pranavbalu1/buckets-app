@@ -307,15 +307,20 @@ export const useLedger = create<LedgerState>((set, get) => {
 
     removeBucket: (id) => {
       const previous = get().buckets.find((item) => item.id === id)
-      if (!previous || get().events.some((event) => event.bucketId === id || event.toBucketId === id)) {
-        set({ error: previous ? 'This bucket has transaction history. Archive it instead of deleting it.' : 'Bucket not found.' })
+      if (!previous) {
+        set({ error: 'Bucket not found.' })
         return Promise.resolve(false)
       }
+      const previousEvents = get().events
       return run(async () => {
         await repo.deleteBucket(id)
+        void queryClient.invalidateQueries({ queryKey: ['planning-settings'] })
       },
-      () => set((s) => ({ buckets: s.buckets.filter((item) => item.id !== id) })),
-      () => set((s) => ({ buckets: [...s.buckets, previous].sort(byOrder) })))
+      () => set((s) => ({
+        buckets: s.buckets.filter((item) => item.id !== id),
+        events: s.events.filter((event) => event.bucketId !== id && event.toBucketId !== id),
+      })),
+      () => set((s) => ({ buckets: [...s.buckets, previous].sort(byOrder), events: previousEvents })))
     },
 
     addEvent: (event) => {
