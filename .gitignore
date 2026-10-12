@@ -10,7 +10,15 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+release
+release-desktop
 *.local
+
+# Native app scaffolding is paused and remains local for now.
+android/
+ios/
+capacitor.config.ts
+MOBILE.md
 
 # Editor directories and files
 .vscode/*

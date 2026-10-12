@@ -1,47 +1,87 @@
 {
   "name": "buckets-app",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
+  "description": "Personal finance and envelope budgeting app",
   "type": "module",
+  "main": "desktop/main.cjs",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:desktop": "tsc -b && vite build --mode desktop",
+    "desktop:dev": "concurrently -k \"vite --mode desktop --host 127.0.0.1 --port 5173 --strictPort\" \"wait-on http://127.0.0.1:5173 && node desktop/launch.cjs\"",
+    "desktop:package": "npm run build:desktop && electron-builder",
+    "desktop:package:win": "npm run build:desktop && electron-builder --win nsis",
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
     "seed:demo": "node --env-file=.env.demo scripts/seed-demo-data.mjs"
   },
-  "dependencies": {
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@huggingface/transformers": "^4.3.1",
+    "@paddleocr/paddleocr-js": "^0.4.2",
     "@supabase/supabase-js": "^2.117.2",
+    "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-query": "^5.104.1",
+    "@types/d3-sankey": "^0.12.5",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
     "class-variance-authority": "^0.7.1",
+    "concurrently": "^10.0.6",
     "d3-sankey": "^0.12.3",
     "date-fns": "^4.4.0",
+    "electron": "^44.7.0",
+    "electron-builder": "^26.15.3",
+    "eslint": "^10.10.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.6",
+    "globals": "^17.12.0",
     "lucide-react": "^1.52.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-is": "^19.3.0",
     "react-router": "^8.4.0",
     "recharts": "^3.10.1",
-    "zod": "^4.6.5",
-    "zustand": "^5.0.15"
-  },
-  "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "@tailwindcss/vite": "^4.3.3",
-    "@types/d3-sankey": "^0.12.5",
-    "@types/node": "^24.13.3",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.7",
-    "@vitejs/plugin-react": "^6.1.1",
-    "eslint": "^10.10.0",
-    "eslint-plugin-react-hooks": "^7.1.1",
-    "eslint-plugin-react-refresh": "^0.5.6",
-    "globals": "^17.12.0",
     "tailwindcss": "^4.3.3",
+    "tesseract.js": "^7.0.0",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.69.0",
     "vite": "^8.3.0",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "wait-on": "^9.5.1",
+    "zod": "^4.6.5",
+    "zustand": "^5.0.15"
+  },
+  "build": {
+    "appId": "com.bucketsapp.desktop",
+    "productName": "Buckets",
+    "asar": true,
+    "directories": {
+      "output": "release-desktop"
+    },
+    "files": [
+      "desktop/**/*",
+      "dist/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "Buckets-Setup.${ext}"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ]
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ]
+    }
   }
 }

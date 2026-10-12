@@ -43,12 +43,18 @@ export interface Bucket {
   color: string | null
 }
 
-/** Savings and future-goal buckets use explicit funding rules, not expense coverage. */
+/**
+ * Savings and future-goal buckets use explicit funding rules, not expense
+ * coverage. This distinction controls which budget calculations apply.
+ */
 export function isSavingsBucket(bucket: Pick<Bucket, 'kind'>): boolean {
   return bucket.kind === 'savings' || bucket.kind.startsWith('save_')
 }
 
-/** Plain and recurring buckets represent planned expenses, including legacy expense kinds. */
+/**
+ * Plain and recurring buckets represent planned expenses, including legacy
+ * expense kinds. Legacy values remain readable for existing user data.
+ */
 export function isExpenseBucket(bucket: Pick<Bucket, 'kind'>): boolean {
   return !isSavingsBucket(bucket)
 }
@@ -75,9 +81,9 @@ export const BUCKET_KIND_LABELS: Record<StoredBucketKind, string> = {
 export const BUCKET_KIND_DESCRIPTIONS: Record<BucketKind, string> = {
   plain: 'Hold money until you decide to spend it.',
   recurring: 'Set a monthly spending plan. Assignments are based on actual expenses, not this target.',
-  save_by_date: 'Reach a target amount by a specific date.',
-  save_by_deposit: 'Save a target amount at an affordable monthly pace.',
-  save_until_date: 'Set a monthly amount and see what you will have by a date.',
+  save_by_date: 'Track your saved balance against a goal. See the monthly amount needed to reach it by your date.',
+  save_by_deposit: 'Track your saved balance and estimated completion date at your planned monthly deposit.',
+  save_until_date: 'Track your growing balance and projected total if you deposit this amount each month through your date.',
 }
 
 export const BUCKET_COLORS = [

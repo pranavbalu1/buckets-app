@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
+import { ScanLine } from 'lucide-react'
 import { todayString } from '../domain/dates'
 import { makeEvent } from '../domain/events'
 import { maxAllocatable, maxReturnable } from '../domain/budget'
@@ -8,6 +9,9 @@ import { directionSchema, validateEvent } from '../domain/validate'
 import type { AddKind } from '../nav'
 import { useLedger } from '../storage/store'
 import { Button, FormField, Input } from '../components'
+import { supportsOnDeviceReceiptScanning } from '../lib/platform'
+
+const ReceiptScanner = lazy(() => import('./ReceiptScanner'))
 
 const KINDS: { id: AddKind; label: string }[] = [
   { id: 'expense', label: 'Expense' },
@@ -76,6 +80,9 @@ export default function QuickAdd({
   const [direction, setDirection] = useState<'in' | 'out'>(initialEvent?.direction ?? 'in')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [receiptScannerOpen, setReceiptScannerOpen] = useState(false)
+  const [receiptMessage, setReceiptMessage] = useState('')
+  const canScanReceipts = supportsOnDeviceReceiptScanning()
   const categoryOptions = buckets.map((bucket) => {
     const groupName = groups.find((group) => group.id === bucket.groupId)?.name
     return { id: bucket.id, name: groupName ? `${groupName} / ${bucket.name}` : bucket.name }
@@ -161,6 +168,17 @@ export default function QuickAdd({
         </div>
       )}
 
+      {kind === 'expense' && !initialEvent && (canScanReceipts
+        ? <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" variant="secondary" onClick={() => { setReceiptScannerOpen(true); setReceiptMessage('') }}>
+            <ScanLine className="size-4" /> Scan receipt
+          </Button>
+          <span className="text-xs text-muted-foreground">Read a receipt photo locally and review the suggested fields.</span>
+        </div>
+        : <p className="text-xs text-muted-foreground">Receipt scanning is available in the desktop app.</p>
+      )}
+      {receiptMessage && <p role="status" className="rounded-lg border border-good/25 bg-good/10 px-3 py-2 text-sm text-good">{receiptMessage}</p>}
+
       <div className="grid gap-3 sm:grid-cols-2">
         <FormField label="Amount">
           <Input inputMode="decimal" placeholder="0.00" value={amount} aria-invalid={Boolean(error)} onChange={(e) => { setAmount(e.target.value); setError('') }} />
@@ -218,6 +236,24 @@ export default function QuickAdd({
       <Button disabled={busy} variant="primary" className="w-full sm:w-auto">
         {busy ? 'Saving…' : initialEvent ? 'Save changes' : 'Add'}
       </Button>
+      {receiptScannerOpen && canScanReceipts && <Suspense fallback={<p role="status" className="text-sm text-muted-foreground">Loading receipt scanner…</p>}>
+        <ReceiptScanner
+          buckets={allBuckets}
+          groups={groups}
+          events={events}
+          onClose={() => setReceiptScannerOpen(false)}
+          onApply={(result, suggestedBucketId) => {
+            if (result.totalCents !== null) setAmount(centsToInput(result.totalCents))
+            if (result.date) setDate(result.date)
+            if (result.merchant) setPayee(result.merchant)
+            if (result.descriptionSuggestion && !description.trim()) setDescription(result.descriptionSuggestion)
+            if (suggestedBucketId) setBucketId(suggestedBucketId)
+            setError('')
+            setReceiptMessage('Receipt values filled in. Review the amount, date, merchant, and category before saving.')
+            setReceiptScannerOpen(false)
+          }}
+        />
+      </Suspense>}
     </form>
   )
 }

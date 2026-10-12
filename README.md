@@ -1,419 +1,365 @@
-# Buckets user guide
+# Buckets
 
-Buckets is a manual-entry envelope budgeting app. Use accounts to represent where
-your money is held, buckets to represent what your money is for, and ledger events
-to record every movement.
+Buckets is an envelope-style budgeting app. It helps you answer three
+questions:
 
-## Before you begin
+1. **Where is my money?** Track checking, savings, cash, credit-card, and other
+   accounts.
+2. **What is my money for?** Assign money to buckets such as Housing, Food, or
+   Transportation.
+3. **What happened to my money?** Record income, allocations, expenses,
+   transfers, bucket moves, and adjustments in one ledger.
 
-Buckets does not connect to banks or import transactions automatically. You enter
-your accounts and transactions manually. Create a backup before importing data,
-deleting an account, or making a large correction.
+Balances and reports are calculated from the ledger. The app does not connect to
+your bank and does not import transactions automatically.
 
-## Sign in and navigate
+## Run targets
 
-1. Open the Buckets site.
-2. Choose **Create account** to register with your name, email, and password, or
-   sign in with an existing account.
-3. If email confirmation is enabled for the Supabase project, follow the link in
-   your confirmation email before signing in.
-   Registration requires the project's Supabase Email provider to allow new
-   users; confirmation behavior follows that project's Auth settings.
-4. Use the navigation to open:
-   - **Dashboard** for a monthly overview and quick actions.
-   - **Budget** for monthly bucket planning.
-   - **Transactions** for the ledger.
-   - **Analytics** for charts and money-flow reports.
-   - **Accounts** for account balances and account management.
-   - **Settings** for backups, recurring plans, paycheck templates,
-     reconciliation, and appearance.
-5. The sidebar profile card shows the account name and email. Its cat photo is a
-   decorative demo avatar, not a profile photo uploaded by the user.
-6. On desktop, the sidebar shows active account balances.
-7. On smaller screens, the navigation can be scrolled horizontally.
+- Web: `npm run dev`
+- Desktop: see [DESKTOP.md](DESKTOP.md)
 
-Use **New transaction** in the sidebar to open the quick-entry form. Press `N`
-when the workspace is focused. Press `Ctrl+K` on Windows/Linux or `⌘K` on macOS
-to search pages and common actions.
+## Quick start
 
-## Recommended first-time setup
+### 1. Sign in
 
-### 1. Add your accounts
+Open the app and choose **Create account** or **Sign in**. If email confirmation
+is enabled by the Supabase project, confirm your email before signing in.
 
-Open **Accounts** and create each place where you hold money, such as checking,
-savings, cash, or a credit card.
+### 2. Add accounts
 
-For each account:
+Open **Accounts** and add each place where money is held:
 
-1. Enter a unique name.
-2. Choose the account type.
-3. Enter the current opening balance. Use a minus sign for a credit-card debt or
-   another negative balance.
-4. Save the account.
+- Checking
+- Savings
+- Cash
+- Credit card
+- Other
 
-The opening balance is recorded as an adjustment event so the account balance
-remains derived from the ledger.
+Enter the current balance as the opening balance. Use a negative amount for a
+credit-card debt or another negative balance. The opening balance is stored as
+an adjustment so the account balance remains part of the ledger.
 
-You can:
+### 3. Create groups and buckets
 
-- Edit account details.
-- Drag accounts to change their order.
-- Open account history.
-- Archive an account to hide it from normal entry screens without deleting its
-  history.
-- Turn on **Show archived** to view archived accounts.
-- Delete an account and its linked records. This is permanent and requires
-  confirmation.
+Open **Budget** and create buckets for the jobs your money needs to do. Groups
+are optional; they organize related buckets:
 
-Account names must be unique for your user, including archived accounts.
+```text
+Food
+  Groceries
+  Restaurants
 
-### 2. Create your buckets
+Housing
+  Rent
+  Utilities
 
-Open **Budget** and add buckets for the jobs your money needs to do. You can
-organize buckets into groups such as Housing, Food, Transportation, or Savings.
+Transportation
+  Fuel
+  Repairs
+```
 
-For each bucket, you can configure:
+A bucket can be:
 
-- A bucket name and group.
-- A bucket kind: spending, savings, or obligation.
-- A monthly target.
-- A savings target amount.
-- A target date.
-- A custom color.
-- An archived state.
+- **Plain old bucket**: hold money until you spend it.
+- **Recurring expense**: set a monthly spending target.
+- **Save by date**: reach a target by a date.
+- **Save by depositing**: reach a target with a monthly contribution.
+- **Save until date**: contribute a monthly amount until a date.
 
-Bucket names must be unique for your user, including archived buckets.
+Targets are planning information. They do not move money automatically.
 
-### 3. Record income
+### 4. Record income
 
 Use **New transaction → Income** or **Deposit**:
 
-1. Enter the date and amount.
-2. Choose the account receiving the money.
+1. Select the account receiving the money.
+2. Enter the date and amount.
 3. Add an optional description, payee, notes, or custom label.
-4. Save the event.
+4. Save the transaction.
 
-Income increases the selected account. It becomes available for allocation in
-the corresponding budget month.
-
-### 4. Assign income to buckets
+### 5. Assign income
 
 Use **New transaction → Allocation** from the relevant budget month:
 
-1. Choose the bucket.
-2. Choose the month.
+1. Choose a bucket.
+2. Choose the budget month.
 3. Enter the amount.
-4. Choose whether money is being added to or returned from the bucket.
-5. Save the allocation.
+4. Save the allocation.
 
-Buckets prevent allocating more money than is available. Returning money also
-cannot exceed the amount available in that bucket.
+Allocations give money a job. They are different from expenses: an allocation
+changes the budget, while an expense records money that was spent.
 
-## Recording everyday activity
+### 6. Record expenses
 
-### Expenses
-
-Choose **New transaction → Expense**:
+Use **New transaction → Expense**:
 
 1. Select the account that paid.
-2. Select the bucket the expense belongs to.
-3. Enter the amount and date.
-4. Add a description, payee, notes, or custom transaction label if useful.
+2. Select the bucket that should cover the expense.
+3. Enter the date and amount.
+4. Add a description or payee.
 5. Save.
 
-An expense reduces the account and bucket balances.
+An expense reduces both the selected account balance and the selected bucket
+balance.
 
-### Moving money between buckets
+## Main pages
 
-Choose **New transaction → Move money**:
+### Dashboard
+
+The Dashboard gives a monthly overview:
+
+- Unallocated money
+- Planned targets
+- Actual spending
+- Variance
+- Expense coverage
+- Savings progress
+- Recent activity
+- Cash-flow summaries
+
+Use the month controls to review another planning period.
+
+### Budget
+
+The Budget page is where you plan and review bucket balances. For a selected
+month you can:
+
+- Review income and money available to assign.
+- Assign money to buckets.
+- Cover recorded expenses.
+- Compare targets with actual spending.
+- Review uncovered expenses.
+- Track savings goals.
+- Inspect bucket balance calculations.
+- Show archived buckets.
+
+**Cover expenses** assigns money based on actual expense activity that is not
+already covered. It does not automatically fund the full monthly target.
+
+Only money intentionally assigned to a bucket rolls forward. An unused target
+does not automatically become assigned money.
+
+### Transactions
+
+Transactions is the complete ledger. Search and filter by:
+
+- Description
+- Payee
+- Notes
+- Custom label
+- Date range
+- Account
+- Bucket
+- Event type
+- Amount
+
+You can edit or delete individual transactions.
+
+### Accounts
+
+Accounts represent where money is physically held. You can:
+
+- Add, edit, reorder, and archive accounts.
+- Open account history.
+- View account balances.
+- Delete an account and its linked records.
+
+Deleting an account is permanent. Export a backup first if you may need its
+history later.
+
+### Analytics
+
+Analytics provides week, month, and year views for:
+
+- Income sources
+- Spending by bucket
+- Savings contributions
+- Savings rate
+- Largest expenses
+- Planned versus actual spending
+- Trends over time
+- Money flow between accounts and buckets
+
+Analytics is derived from ledger events and does not create additional
+transactions.
+
+### Settings
+
+Settings contains supporting workflows:
+
+- Backup export and restore
+- Recurring plans
+- Paycheck templates
+- Account reconciliation
+- Appearance and theme settings
+
+Create a backup before importing data, restoring a backup, deleting an account,
+deleting a bucket, or making a large correction.
+
+## Moving money
+
+### Move money between buckets
+
+Use **New transaction → Move money**:
 
 1. Select the source bucket.
 2. Select the destination bucket.
 3. Enter the amount and date.
 4. Save.
 
-The source and destination must be different buckets.
+The source and destination buckets must be different.
 
-### Transferring money between accounts
+### Transfer between accounts
 
-Choose **New transaction → Transfer**:
+Use **New transaction → Transfer**:
 
 1. Select the source account.
 2. Select the destination account.
 3. Enter the amount and date.
 4. Save.
 
-An account transfer changes where money is held without changing the overall
-amount of money.
+An account transfer changes where money is held but does not change total money.
 
-### Deposits and adjustments
+### Adjust a balance
 
-- Use **Deposit** for income entering an account.
-- Use **Adjustment** for a deliberate balance correction, such as correcting a
-  starting balance or recording a reconciliation difference.
-- Adjustments require a direction: money in or money out.
+Use **Adjustment** for a deliberate correction, such as:
 
-## Dashboard
+- Correcting an opening balance
+- Matching a statement during reconciliation
+- Recording money that entered or left outside the normal workflow
 
-The **Dashboard** provides a quick view of the selected month:
+Adjustments require a direction: money in or money out.
 
-- Unallocated money available to assign.
-- Planned expense targets compared with actual spending and variance.
-- Expense coverage and savings contributions.
-- Recent activity.
-- Cash-flow bars.
-- Shortcuts to add a transaction, review the budget, or manage accounts.
+## Editing and deleting buckets
 
-Use the month controls to move between planning periods. Dashboard values are
-calculated from the ledger rather than entered separately.
+Archiving is optional. It hides a bucket from normal entry screens while
+preserving its history.
 
-## Monthly budgeting
+To permanently delete a bucket:
 
-The **Budget** page is where you give every dollar a job.
+1. Open **Budget**.
+2. Open the bucket editor.
+3. Choose **Delete permanently**.
+4. Read the confirmation and confirm.
 
-For the selected month:
-
-- Review income, planned expenses, actual spending, budget variance, and unallocated money separately.
-- Use **Cover expenses** to assign only the amount of recorded expense activity that is not already covered by assignments or bucket moves.
-- Coverage is based on actual expenses, can exceed the planned target, and is limited by money available to assign. Any shortfall remains visible as uncovered.
-- A positive variance means spending is under plan; a negative variance means spending is over plan. Variance is an analytical comparison, not cash available in an account.
-- Expand a bucket to see its month-end balance calculation.
-- Compare each expense bucket's plan, spending, coverage, uncovered amount, and variance.
-- Track savings-goal progress.
-- Review remaining amounts and target-date projections.
-- Use archived-bucket controls when you need to inspect older categories.
+Permanent deletion removes:
 
-Create or edit a bucket from the budget controls. Use **Fund savings goals** or
-the bucket's assignment field for savings contributions and money intentionally
-reserved for future expenses. Expense targets guide spending; they do not move
-money automatically. Allocations and bucket moves change the budget ledger, not
-the bank account balance.
+- The bucket
+- Ledger events using the bucket
+- Bucket moves involving the bucket
+- Recurring plans using the bucket
+- The bucket's entries in paycheck templates
 
-### Rollover
+This cannot be undone. The delete operation is scoped to the signed-in user
+and runs atomically, so the bucket and its dependent records are removed
+together or not at all.
 
-Only money intentionally assigned to a bucket can roll over. Unused target
-amounts remain unallocated; for example, a $500 grocery plan with $400 in
-spending is covered by $400, leaving the unused $100 in the available-to-assign
-pool unless you explicitly assign it. Existing assigned balances continue to
-roll over and are not silently converted to cash surplus.
+If the app reports that bucket deletion is not enabled in the database, apply
+[`supabase/migrations/013_delete_bucket_with_history.sql`](supabase/migrations/013_delete_bucket_with_history.sql)
+to the Supabase project. The frontend change alone cannot create the database
+function required for permanent deletion.
 
-## Transactions
+## Keyboard shortcuts
 
-The **Transactions** page contains the full ledger.
+- Press `N` while the workspace is focused to open a new transaction.
+- Press `Ctrl+K` on Windows/Linux or `⌘K` on macOS to open search and actions.
 
-You can:
+On smaller screens, the navigation can be scrolled horizontally.
 
-- Search descriptions, payees, notes, and custom labels.
-- Filter by date range.
-- Filter by account.
-- Filter by bucket.
-- Filter by event type.
-- Filter by amount.
-- Edit an existing transaction.
-- Delete a transaction.
-- Open the account or bucket associated with an event.
+## Data and privacy
 
-Use consistent descriptions and payees so search and analytics remain useful.
-Custom transaction labels are optional and can be up to 40 characters.
+- Each signed-in user can access only their own accounts, groups, buckets,
+  events, plans, templates, and reconciliations.
+- Money is stored as integer cents to avoid floating-point rounding errors.
+- The ledger is the source of truth; balances are derived.
+- Backups contain financial data and should be stored securely.
+- Do not commit `.env.local`, Supabase keys, or exported backup files.
 
-## Analytics and money flow
+The profile card's cat image is a decorative demo avatar. It is not an image
+uploaded as the user's profile photo.
 
-Open **Analytics** to review activity over a selected week, month, or year.
+## Local development
 
-Available views include:
+### Requirements
 
-- Income sources.
-- Spending by bucket.
-- Savings contributions and savings rate.
-- Largest expenses.
-- Planned-versus-actual gauges with over-plan states.
-- A selected group budget gauge.
-- A selected bucket budget gauge.
-- Stacked activity bars.
-- Category and area-line charts.
-- A Sankey diagram showing covered expense amounts by group and bucket, explicit
-  savings contributions, and uncovered expense totals. Planned targets do not
-  create flow values.
+- Node.js with npm
+- A Supabase project
 
-Analytics keeps cash flow, budget performance, assignment, and coverage distinct:
-unallocated money is available to assign, budget variance is planned minus spent,
-and covered or uncovered amounts describe recorded expense coverage.
+### Install and configure
 
-Use group and bucket selectors to focus the budget gauges. Use the date range
-controls to compare different periods. Charts are derived from the same ledger
-used by the Dashboard and Budget pages.
+```powershell
+npm install
+Copy-Item .env.example .env.local
+```
 
-## Recurring plans
+Set these values in `.env.local`:
 
-Open **Settings** and find **Recurring plans** to schedule expected activity.
+```text
+VITE_SUPABASE_URL=your-supabase-project-url
+VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
+```
 
-Supported plan types:
+The browser client must only receive the publishable/anonymous Supabase key.
+Never put a service-role key in a `VITE_` variable or browser code.
 
-- Income.
-- Expense.
-- Account transfer.
-- Bucket move.
+### Run locally
 
-When creating a plan:
+```powershell
+npm run dev
+```
 
-1. Enter a name.
-2. Choose the transaction type.
-3. Enter the amount.
-4. Choose weekly, every two weeks, monthly, or yearly frequency.
-5. Choose the first occurrence date.
-6. Optionally choose an end date.
-7. Select the accounts or buckets involved.
-8. Save the plan.
+### Validate changes
 
-Recurring plans do not automatically add events to the ledger. When the next
-occurrence is due, it appears as **Pending**:
+```powershell
+npm run lint
+npm test
+npm run build
+```
 
-- **Confirm** posts the event and advances the next occurrence.
-- **Skip** advances the schedule without posting an event.
-- **Pause** stops future pending occurrences.
-- **Resume** reactivates a paused plan.
-- **Delete** removes the plan.
+### Apply migrations
 
-Review pending plans regularly so expected bills and income do not remain
-unrecorded.
-
-## Paycheck templates
-
-Open **Settings** and find **Paycheck templates** to save a repeatable paycheck
-allocation.
-
-To create one:
-
-1. Enter a template name.
-2. Choose the account receiving the paycheck.
-3. Enter bucket allocations.
-4. Save the template.
-
-To use one:
-
-1. Enter the paycheck amount and date.
-2. Select the account.
-3. Choose the saved template.
-4. Review the allocation preview.
-5. Apply it.
-
-The action creates the income event and its bucket allocations together. Check
-that the allocations are appropriate before confirming.
-
-## Account reconciliation
-
-Use **Settings → Reconciliation** to compare an account with a statement.
-
-1. Choose an active account.
-2. Enter the statement date.
-3. Enter the statement balance.
-4. Review the app's calculated balance and difference.
-5. Choose whether to post a balancing adjustment.
-6. Save the reconciliation.
-
-Reconciliation records the comparison without rewriting previous transactions.
-If an adjustment is posted, it appears as a separate ledger event.
-
-## Backups and restore
-
-Open **Settings → Your data and backups**.
-
-### Export
-
-Click **Export JSON** to download a portable backup containing:
-
-- Accounts.
-- Bucket groups and buckets.
-- Ledger events.
-- Recurring plans.
-- Paycheck templates.
-- Reconciliation history.
-
-Export regularly. The app records the last export date on the current browser
-and shows a reminder after 30 days.
-
-### Import
-
-1. Export a current backup first.
-2. Click **Import JSON**.
-3. Select a Buckets backup file.
-4. Read the replacement warning.
-5. Confirm only if you intend to replace the current finance and planning data.
-
-Import replaces the current user's accounts, buckets, events, plans, templates,
-and reconciliation history. It does not replace the login. Do not close the
-browser while the restore is running.
-
-## Appearance and accessibility
-
-Open **Settings → Appearance** and choose:
-
-- **Dark - library palette**
-- **Light - accessible contrast**
-
-The preference is saved on the current browser/device. It does not change other
-devices or users.
-
-The app uses semantic colors for charts, progress bars, alerts, and controls.
-Do not rely on color alone when reading a chart; use the displayed labels and
-values as well.
-
-## Command menu
-
-Press `Ctrl+K` on Windows/Linux or `⌘K` on macOS, or click **Search pages and
-actions** in the sidebar.
-
-Use it to:
-
-- Navigate to a page.
-- Open common money actions.
-- Switch between appearance themes.
-
-Press `Escape` to close the menu.
-
-## Troubleshooting
-
-### The app cannot load data
-
-Check that:
-
-- You are signed in.
-- The Supabase project URL and publishable/anon key are configured.
-- The required migrations have been applied in numeric order.
-- The browser has an internet connection.
-
-Refresh the page and retry. If the error continues, open the development-only
-`/devtools` route when running a local development build to inspect configuration,
-authentication, schema access, and local storage.
-
-### A record cannot be created
-
-Check that:
-
-- The amount is greater than zero.
-- Required accounts or buckets are selected.
-- Source and destination records are different for transfers and moves.
-- The name is not already used by another account or bucket.
-- The allocation does not exceed available money.
-
-### A migration says an object already exists
-
-Do not drop the table or delete user data. Back up first, then use the corrected
-migration for the project state and inspect the existing schema before applying
-additional changes.
-
-### The favicon does not change
-
-Browsers cache favicons aggressively. Use a PNG or ICO asset, update the favicon
-URL with a new filename or query string, redeploy, and hard-refresh or reopen the
-tab.
-
-## Safe-use checklist
-
-- Export a backup before imports, deletions, or schema changes.
-- Use a separate demo account for sample data.
-- Never share your password or private service-role key.
-- Never put a Supabase service-role key in a `VITE_` environment variable.
-- Review pending recurring plans.
-- Reconcile important accounts regularly.
-- Verify the selected month before allocating money.
+Apply the files in `supabase/migrations` in numeric order using the Supabase
+CLI or the Supabase SQL Editor. Do not edit a migration that has already been
+applied to a shared project; add a new numbered migration instead.
+
+The bucket deletion workflow specifically requires migration `013`.
+
+## Project structure
+
+```text
+src/
+  domain/       Pure budgeting, ledger, money, validation, and analytics logic
+  features/     User-facing pages and workflows
+  components/   Reusable UI components
+  storage/      Zustand state, repository interfaces, mappers, and Supabase I/O
+  lib/          Supabase client, query client, theme, and shared utilities
+supabase/
+  migrations/   Database schema, security policies, and transactional RPCs
+scripts/        Local demo and maintenance scripts
+```
+
+The repository follows a few important rules:
+
+1. Keep monetary values as integer cents.
+2. Keep the ledger as the single source of truth.
+3. Validate input in both the client and database.
+4. Preserve row-level security for user-owned data.
+5. Add a new migration for every schema change.
+6. Add tests for changes to domain calculations.
+7. Keep secrets out of source code, browser bundles, logs, and commits.
+
+## Current limitations
+
+- There is no bank synchronization or automatic transaction import.
+- Transactions are entered manually.
+- Receipt scanning is not currently implemented.
+- Automatic bucket assignment is not currently implemented.
+- A deleted bucket and its dependent history cannot be restored except by
+  restoring a backup.
+
+## License and commercial use
+
+Check the repository's applicable license and the licenses of all dependencies
+before distributing or commercializing a deployment. Use original branding and
+assets, and do not assume that similar budgeting concepts grant permission to
+copy another product's implementation or identity.

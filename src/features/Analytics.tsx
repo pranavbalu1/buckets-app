@@ -1,12 +1,14 @@
 import { useMemo, useState } from 'react'
-import { addMonths, addWeeks, addYears, format } from 'date-fns'
+import { addDays, addMonths, addWeeks, addYears, format } from 'date-fns'
 import { ArrowLeft, ArrowRight, BarChart3, CircleDollarSign, ReceiptText, WalletCards } from 'lucide-react'
-import { AreaLineGraph, BudgetGaugeGraph, Button, Card, MetricCard, Select, SegmentedControl, SemiGaugeGraph, StackedBarGraph, Tile, TileBoard } from '../components'
+import { AreaLineGraph, BudgetGaugeGraph, Button, Card, MetricCard, ProgressBar, Select, SegmentedControl, SemiGaugeGraph, StackedBarGraph, Tile, TileBoard } from '../components'
 import { buildAnalytics } from '../domain/analytics'
 import type { AnalyticsPeriod } from '../domain/analytics'
-import { todayString } from '../domain/dates'
+import { computeBalances } from '../domain/balances'
+import { dateLabel, monthLabel, todayString } from '../domain/dates'
 import { formatCents } from '../domain/money'
-import { isExpenseBucket } from '../domain/models'
+import { BUCKET_KIND_LABELS, bucketColor, isExpenseBucket, isSavingsBucket } from '../domain/models'
+import { projectSavingsGoal } from '../domain/savingsGoals'
 import { dateSchema, firstIssueMessage } from '../domain/validate'
 import { useLedger } from '../storage/store'
 import SankeyChart from './analytics/MoneyFlowSankey'
@@ -31,6 +33,48 @@ export default function Analytics() {
   const [spendingView, setSpendingView] = useState<'actual' | 'variance'>('actual')
   const summary = useMemo(() => buildAnalytics(events, buckets, period, selectedDate), [events, buckets, period, selectedDate])
   const trendData = buildCumulativeTrend(summary.points)
+  const savingsProgress = useMemo(() => {
+    const previousDay = format(addDays(new Date(`${summary.startDate}T12:00:00`), -1), 'yyyy-MM-dd')
+    const opening = computeBalances(events, previousDay).buckets
+    const ending = computeBalances(events, summary.endDate).buckets
+    return buckets
+      .filter((bucket) => !bucket.archived && isSavingsBucket(bucket))
+      .map((bucket) => {
+        const balanceCents = ending[bucket.id] ?? 0
+        const openingCents = opening[bucket.id] ?? 0
+        const activity = summary.bucketActivity.find((row) => row.id === bucket.id)
+        const netAddedCents = (activity?.allocated ?? 0) + (activity?.movedIn ?? 0) - (activity?.movedOut ?? 0)
+        const withdrawalsCents = activity?.spent ?? 0
+        const goal = projectSavingsGoal(bucket, balanceCents, summary.endDate)
+        const status = goal.remainingCents !== null
+          ? goal.remainingCents === 0
+            ? `Goal reached · saved ${formatCents(balanceCents)} of ${formatCents(bucket.targetCents ?? 0)}`
+            : goal.targetDatePassed
+              ? `${formatCents(goal.remainingCents)} remaining · target date passed ${dateLabel(bucket.targetDate ?? summary.endDate)}`
+              : goal.requiredMonthlyCents !== null
+                ? `${formatCents(goal.remainingCents)} remaining · save ${formatCents(goal.requiredMonthlyCents)} per month by ${dateLabel(bucket.targetDate ?? summary.endDate)}`
+                : goal.estimatedCompletionMonth
+                  ? `At ${formatCents(bucket.monthlyTargetCents)} per month · estimated ${monthLabel(goal.estimatedCompletionMonth)}`
+                  : `${formatCents(goal.remainingCents)} left to save`
+          : bucket.targetDate
+            ? goal.targetDatePassed
+              ? `Target date passed · saved balance is ${formatCents(balanceCents)}`
+              : `Projected ${formatCents(goal.projectedBalanceAtTargetCents ?? balanceCents)} by ${dateLabel(bucket.targetDate)} at ${formatCents(bucket.monthlyTargetCents)} per month`
+            : 'Keep assigning money to grow this saved balance'
+        return {
+          bucket,
+          balanceCents,
+          changeCents: balanceCents - openingCents,
+          netAddedCents,
+          withdrawalsCents,
+          goal,
+          status,
+          progressPercent: goal.progressPercent ?? (bucket.monthlyTargetCents > 0 ? netAddedCents / bucket.monthlyTargetCents * 100 : null),
+          progressLabel: goal.progressPercent !== null ? 'Goal progress' : 'Monthly deposit progress',
+        }
+      })
+  }, [buckets, events, summary])
+  const savingsBalanceTotal = summary.savingsBalancePoints.at(-1)?.balanceCents ?? 0
   const changePeriod = (direction: -1 | 1) => {
     const date = new Date(`${selectedDate}T12:00:00`)
     const next = period === 'week' ? addWeeks(date, direction) : period === 'year' ? addYears(date, direction) : addMonths(date, direction)
@@ -180,7 +224,7 @@ export default function Analytics() {
         <MetricCard className="p-3.5 sm:p-5" type="compact" priority="low" title="Net cash flow" amount={formatCents(summary.netActivityCents)} subtitle="Surplus or deficit" />
       </Tile>
       <Tile id="savings-total" label="Savings contributions" className="col-span-full xl:col-span-3">
-        <MetricCard className="p-3.5 sm:p-5" type="compact" priority="high" title="Savings contributions" amount={formatCents(summary.savingsCents)} subtitle={`${summary.savingsRate.toFixed(1)}% rate · ${formatCents(summary.savingsGrowthCents)} growth`} />
+        <MetricCard className="p-3.5 sm:p-5" type="compact" priority="high" title="Saved at period end" amount={formatCents(savingsBalanceTotal)} subtitle={`${formatCents(summary.savingsGrowthCents)} net balance change · ${summary.savingsRate.toFixed(1)}% contribution rate`} />
       </Tile>
       <Tile id="average-expense-total" label="Average expense" className="col-span-full xl:col-span-3">
         <MetricCard className="p-3.5 sm:p-5" type="compact" priority="low" title="Average expense" amount={formatCents(summary.averageExpenseCents)} subtitle={`${summary.largestExpenses.length ? 'Largest expense' : 'No expenses'}${summary.largestExpenses[0] ? ` · ${formatCents(summary.largestExpenses[0].amountCents)}` : ''}`} />
@@ -262,6 +306,45 @@ export default function Analytics() {
       />
       </Tile>
 
+      {savingsProgress.length > 0 && <>
+        <Tile id="savings-balance-trend" label="Savings balance trend" className="col-span-full">
+          <AreaLineGraph
+            title="Savings balance over time"
+            subtitle={`${summary.title} · Total saved balance at each point in the period`}
+            data={summary.savingsBalancePoints.map((point) => ({ label: point.label, value: point.balanceCents / 100 }))}
+            strokeColor="var(--color-chart-2)"
+            gradientStart="color-mix(in srgb, var(--color-chart-2) 26%, transparent)"
+            gradientStop="transparent"
+          />
+        </Tile>
+        <Tile id="savings-goal-progress" label="Savings goals" className="col-span-full">
+          <Card className="p-4 sm:p-5">
+            <div className="mb-4"><h2 className="font-semibold">Savings goals</h2><p className="mt-1 text-xs text-muted-foreground">Current saved balances, changes during this period, and goal timelines.</p></div>
+            <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+              {savingsProgress.map(({ bucket, balanceCents, changeCents, netAddedCents, withdrawalsCents, goal, status, progressPercent, progressLabel }) => (
+                <article key={bucket.id} className="min-w-0 rounded-xl border border-border/70 bg-surface p-3">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-start gap-2">
+                      <span className="mt-1 size-2.5 shrink-0 rounded-full" style={{ backgroundColor: bucketColor(bucket) }} />
+                      <div className="min-w-0"><h3 className="truncate text-sm font-semibold">{bucket.name}</h3><p className="truncate text-xs text-muted-foreground">{BUCKET_KIND_LABELS[bucket.kind]}</p></div>
+                    </div>
+                    <strong className="shrink-0 text-sm tabular-nums">{formatCents(balanceCents)}</strong>
+                  </div>
+                  {progressPercent !== null && <div className="mb-1"><div className="mb-1 flex justify-between gap-2 text-[11px] text-muted-foreground"><span>{progressLabel}</span><span>{goal.progressPercent !== null ? `${Math.floor(goal.progressPercent)}%` : `${Math.max(0, Math.floor(netAddedCents / Math.max(1, bucket.monthlyTargetCents) * 100))}%`}</span></div><ProgressBar pct={progressPercent} color={bucketColor(bucket)} /></div>}
+                  <p className="min-h-8 text-xs text-muted-foreground">{status}</p>
+                  <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 border-t border-border/60 pt-2 text-[11px]">
+                    <span className="text-muted-foreground">Balance change</span><strong className={`text-right tabular-nums ${changeCents < 0 ? 'text-bad' : ''}`}>{formatCents(changeCents)}</strong>
+                    <span className="text-muted-foreground">Net added</span><strong className="text-right tabular-nums">{formatCents(netAddedCents)}</strong>
+                    {withdrawalsCents > 0 && <><span className="text-muted-foreground">Withdrawals</span><strong className="text-right tabular-nums">{formatCents(withdrawalsCents)}</strong></>}
+                    {bucket.monthlyTargetCents > 0 && <><span className="text-muted-foreground">Monthly deposit</span><strong className="text-right tabular-nums">{formatCents(bucket.monthlyTargetCents)}</strong></>}
+                  </div>
+                </article>
+              ))}
+            </div>
+          </Card>
+        </Tile>
+      </>}
+
       <Tile id="budget-vs-actual" label="Budget versus actual" className="col-span-full">
       <Card className="p-4 sm:p-5">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -308,11 +391,11 @@ export default function Analytics() {
 
       <Tile id="bucket-activity" label="Bucket activity" className="col-span-full xl:col-span-3">
         <Card className="p-4 sm:p-5">
-          <div className="mb-4"><h2 className="font-semibold">Bucket activity</h2><p className="mt-1 text-xs text-muted-foreground">Planned spending, actual expenses, coverage, and variance.</p></div>
-          {summary.bucketActivity.length ? <div className="overflow-x-auto"><table className="w-full min-w-[44rem] text-sm">
+          <div className="mb-4"><h2 className="font-semibold">Expense bucket activity</h2><p className="mt-1 text-xs text-muted-foreground">Planned spending, actual expenses, coverage, and variance. Savings activity is shown separately.</p></div>
+          {summary.bucketActivity.some((row) => row.isExpense) ? <div className="overflow-x-auto"><table className="w-full min-w-[44rem] text-sm">
             <thead><tr className="border-b border-border text-left text-xs text-muted-foreground"><th className="py-2 pr-2 font-medium">Bucket</th><th className="px-2 text-right font-medium">Planned</th><th className="px-2 text-right font-medium">Spent</th><th className="px-2 text-right font-medium">Covered</th><th className="px-2 text-right font-medium">Uncovered</th><th className="px-2 text-right font-medium">Variance</th><th className="py-2 pl-2 text-right font-medium">Assigned</th></tr></thead>
-            <tbody>{summary.bucketActivity.slice(0, 10).map((row) => <tr key={row.id} className="border-b border-border/50"><td className="max-w-40 truncate py-2.5 pr-2">{row.name}</td><td className="px-2 text-right tabular-nums">{row.isExpense ? formatCents(row.planned) : '—'}</td><td className="px-2 text-right tabular-nums">{formatCents(row.spent)}</td><td className="px-2 text-right tabular-nums">{row.isExpense ? formatCents(row.covered) : '—'}</td><td className="px-2 text-right tabular-nums">{row.isExpense ? formatCents(row.uncovered) : '—'}</td><td className={`px-2 text-right tabular-nums ${row.variance < 0 ? 'text-bad' : row.isExpense ? 'text-good' : ''}`}>{row.isExpense ? formatCents(row.variance) : '—'}</td><td className="pl-2 text-right tabular-nums">{formatCents(row.allocated)}</td></tr>)}</tbody>
-          </table></div> : <EmptyChart>No bucket activity in this period.</EmptyChart>}
+            <tbody>{summary.bucketActivity.filter((row) => row.isExpense).slice(0, 10).map((row) => <tr key={row.id} className="border-b border-border/50"><td className="max-w-40 truncate py-2.5 pr-2">{row.name}</td><td className="px-2 text-right tabular-nums">{formatCents(row.planned)}</td><td className="px-2 text-right tabular-nums">{formatCents(row.spent)}</td><td className="px-2 text-right tabular-nums">{formatCents(row.covered)}</td><td className="px-2 text-right tabular-nums">{formatCents(row.uncovered)}</td><td className={`px-2 text-right tabular-nums ${row.variance < 0 ? 'text-bad' : 'text-good'}`}>{formatCents(row.variance)}</td><td className="pl-2 text-right tabular-nums">{formatCents(row.allocated)}</td></tr>)}</tbody>
+          </table></div> : <EmptyChart>No expense bucket activity in this period.</EmptyChart>}
         </Card>
       </Tile>
       <Tile id="period-transactions" label="Period transactions" className="col-span-full xl:col-span-3">

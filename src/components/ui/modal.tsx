@@ -1,7 +1,10 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 
+const modalStack: string[] = []
+
 export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
   const dialogId = useId()
+  const modalId = dialogId
   const dialogRef = useRef<HTMLDivElement>(null)
   const closeRef = useRef(onClose)
 
@@ -10,6 +13,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
   }, [onClose])
 
   useEffect(() => {
+    modalStack.push(modalId)
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const focusable = () => Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
       'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
@@ -22,6 +26,7 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
     })
 
     const onKeyDown = (event: KeyboardEvent) => {
+      if (modalStack[modalStack.length - 1] !== modalId) return
       if (event.key === 'Escape') {
         event.preventDefault()
         closeRef.current()
@@ -48,12 +53,14 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
     return () => {
       window.cancelAnimationFrame(firstFrame)
       window.removeEventListener('keydown', onKeyDown)
+      const stackIndex = modalStack.lastIndexOf(modalId)
+      if (stackIndex >= 0) modalStack.splice(stackIndex, 1)
       previousFocus?.focus()
     }
-  }, [])
+  }, [modalId])
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 pb-[env(safe-area-inset-bottom)] sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 backdrop-blur-sm pb-[env(safe-area-inset-bottom)] sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
       <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby={`${dialogId}-title`} tabIndex={-1}
         className="card max-h-[90vh] max-h-[90dvh] w-full touch-pan-y overscroll-contain overflow-y-auto rounded-b-none p-4 sm:max-w-lg sm:rounded-b-xl sm:p-5"
         onMouseDown={(event) => event.stopPropagation()}>
