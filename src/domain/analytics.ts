@@ -6,6 +6,7 @@ import type { LedgerEvent } from './types'
 
 export type AnalyticsPeriod = 'week' | 'month' | 'year'
 export interface AnalyticsPoint { label: string; income: number; spending: number; planned: number; variance: number; savings: number }
+export interface SavingsBalancePoint { label: string; balanceCents: number }
 export interface AnalyticsRow {
   id: string
   name: string
@@ -52,6 +53,7 @@ export interface AnalyticsSummary {
   averageExpenseCents: number
   netActivityCents: number
   points: AnalyticsPoint[]
+  savingsBalancePoints: SavingsBalancePoint[]
   spendingByBucket: AnalyticsRow[]
   incomeBySource: AnalyticsRow[]
   budget: AnalyticsRow[]
@@ -159,6 +161,29 @@ export function buildAnalytics(events: LedgerEvent[], buckets: Bucket[], period:
   }
 
   const points: AnalyticsPoint[] = []
+  const savingsBalancePoints: SavingsBalancePoint[] = []
+  const savingsActivity = events.filter((event) =>
+    (event.type === 'allocation' && Boolean(event.bucketId && savingsBuckets.has(event.bucketId)))
+    || (event.type === 'expense' && Boolean(event.bucketId && savingsBuckets.has(event.bucketId)))
+    || (event.type === 'bucket_move' && Boolean((event.bucketId && savingsBuckets.has(event.bucketId)) || (event.toBucketId && savingsBuckets.has(event.toBucketId)))),
+  ).sort((a, b) => effectiveDate(a).localeCompare(effectiveDate(b)))
+  let savingsActivityIndex = 0
+  let savingsBalanceCents = 0
+  const savingsBalanceAt = (asOf: string) => {
+    while (savingsActivityIndex < savingsActivity.length && effectiveDate(savingsActivity[savingsActivityIndex]) <= asOf) {
+      const event = savingsActivity[savingsActivityIndex]
+      if (event.type === 'allocation' && event.bucketId && savingsBuckets.has(event.bucketId)) {
+        savingsBalanceCents += event.direction === 'out' ? -event.amountCents : event.amountCents
+      } else if (event.type === 'expense' && event.bucketId && savingsBuckets.has(event.bucketId)) {
+        savingsBalanceCents -= event.amountCents
+      } else if (event.type === 'bucket_move') {
+        if (event.bucketId && savingsBuckets.has(event.bucketId)) savingsBalanceCents -= event.amountCents
+        if (event.toBucketId && savingsBuckets.has(event.toBucketId)) savingsBalanceCents += event.amountCents
+      }
+      savingsActivityIndex += 1
+    }
+    return savingsBalanceCents
+  }
   if (period === 'year') {
     for (let cursor = startOfMonth(start); cursor <= end; cursor = addMonths(cursor, 1)) {
       const monthStart = key(cursor)
@@ -167,7 +192,9 @@ export function buildAnalytics(events: LedgerEvent[], buckets: Bucket[], period:
         const date = effectiveDate(event)
         return date >= monthStart && date < next
       })
-      points.push(point(format(cursor, 'MMM'), rows, savingsBuckets, expenseBuckets.reduce((sum, bucket) => sum + bucket.monthlyTargetCents, 0)))
+      const label = format(cursor, 'MMM')
+      points.push(point(label, rows, savingsBuckets, expenseBuckets.reduce((sum, bucket) => sum + bucket.monthlyTargetCents, 0)))
+      savingsBalancePoints.push({ label, balanceCents: savingsBalanceAt(key(endOfMonth(cursor))) })
     }
   } else {
     const count = period === 'week' ? 7 : end.getDate()
@@ -176,7 +203,9 @@ export function buildAnalytics(events: LedgerEvent[], buckets: Bucket[], period:
       const cursor = addDays(start, index)
       const dateKey = key(cursor)
       const rows = inPeriod.filter((event) => effectiveDate(event) === dateKey)
-      points.push(point(format(cursor, period === 'week' ? 'EEE' : 'd'), rows, savingsBuckets, periodPlan / count))
+      const label = format(cursor, period === 'week' ? 'EEE' : 'd')
+      points.push(point(label, rows, savingsBuckets, periodPlan / count))
+      savingsBalancePoints.push({ label, balanceCents: savingsBalanceAt(dateKey) })
     }
   }
 
@@ -226,6 +255,7 @@ export function buildAnalytics(events: LedgerEvent[], buckets: Bucket[], period:
     averageExpenseCents: expenseEvents.length ? Math.round(spendingCents / expenseEvents.length) : 0,
     netActivityCents: netCashFlowCents,
     points,
+    savingsBalancePoints,
     spendingByBucket: [...spending].map(([id, amount]) => ({ id, name: bucketNames.get(id) ?? 'Unassigned', amount, spent: amount, planned: 0, covered: 0, uncovered: 0, variance: 0 })).sort((a, b) => b.amount - a.amount),
     incomeBySource: [...sources].map(([name, amount]) => ({ id: name, name, amount, spent: 0, planned: 0, covered: 0, uncovered: 0, variance: 0 })).sort((a, b) => b.amount - a.amount),
     budget,

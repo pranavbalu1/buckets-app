@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { DragEvent } from 'react'
 import { ArrowDown, ArrowUp, Check, ChevronDown, CircleDollarSign, GripVertical, Plus, ReceiptText, Users } from 'lucide-react'
-import { Button, Card, List, Modal, ProgressBar, Skeleton, Tile, TileBoard } from '../components'
+import { AreaLineGraph, Button, Card, List, Modal, ProgressBar, Skeleton, Tile, TileBoard } from '../components'
 import type { ListItemData } from '../components'
 import Money from '../app/components/Money'
 import { computeBalances } from '../domain/balances'
@@ -12,6 +12,7 @@ import { makeEvent } from '../domain/events'
 import { centsToInput, formatCents, parseDollars, parseSignedDollars } from '../domain/money'
 import { BUCKET_KIND_LABELS, bucketColor, isExpenseBucket, isSavingsBucket } from '../domain/models'
 import type { Bucket, BucketGroup } from '../domain/models'
+import { projectSavingsGoal } from '../domain/savingsGoals'
 import { useLedger } from '../storage/store'
 import BudgetEditor from './BudgetEditor'
 
@@ -41,6 +42,19 @@ export default function Budget() {
     () => computeMonthBudget(events, buckets, month),
     [events, buckets, month],
   )
+  const savingsHistory = useMemo(() => {
+    const bucketsWithHistory = new Map<string, { label: string; value: number }[]>()
+    for (const bucket of buckets.filter(isSavingsBucket)) bucketsWithHistory.set(bucket.id, [])
+    for (let offset = 11; offset >= 0; offset -= 1) {
+      const historyMonth = addMonths(month, -offset)
+      const endingBuckets = computeBalances(events, `${historyMonth}-31`).buckets
+      const label = monthLabel(historyMonth).split(' ')[0].slice(0, 3)
+      for (const [bucketId, history] of bucketsWithHistory) {
+        history.push({ label, value: (endingBuckets[bucketId] ?? 0) / 100 })
+      }
+    }
+    return bucketsWithHistory
+  }, [buckets, events, month])
   const bank = useMemo(() => {
     const b = computeBalances(events, `${month}-31`)
     return Object.values(b.accounts).reduce((a, c) => a + c, 0)
@@ -513,13 +527,7 @@ export default function Budget() {
                             {bucketMonth?.uncoveredCents ? `${formatCents(bucketMonth.uncoveredCents)} needs coverage` : bucketMonth && bucketMonth.varianceCents < 0 ? `${formatCents(-bucketMonth.varianceCents)} over plan` : `${formatCents(bucket.monthlyTargetCents)} planned`}
                           </p>
                         </div>
-                      ) : bucket.monthlyTargetCents > 0 ? (
-                        <div title={`Savings assigned ${formatCents(funded)} of ${formatCents(bucket.monthlyTargetCents)} monthly contribution target`}>
-                          <p className="truncate text-[11px] leading-4 tabular-nums"><span className="text-muted-foreground">Assigned </span>{formatCents(funded)} / {formatCents(bucket.monthlyTargetCents)}</p>
-                          <ProgressBar pct={(funded / bucket.monthlyTargetCents) * 100} over={funded > bucket.monthlyTargetCents} color={bucketColor(bucket)} />
-                          <p className="truncate text-[10px] text-muted-foreground">Savings contribution target</p>
-                        </div>
-                      ) : <p className="truncate text-[11px] text-muted-foreground">Spent {formatCents(spent)} · No monthly target</p>}
+                      ) : <SavingsBucketActivity bucket={bucket} month={month} balance={available} netFunding={funded} withdrawals={spent} />}
                     </div>}
                     {isExpanded && <span className="hidden 2xl:block" aria-hidden="true" />}
                     <div className="col-span-2 flex items-center justify-between gap-2 2xl:col-span-1 2xl:justify-end">
@@ -561,6 +569,7 @@ export default function Budget() {
                         row={bucketMonth}
                         month={month}
                         groupName={groups.find((candidate) => candidate.id === bucket.groupId)?.name ?? 'Ungrouped'}
+                        savingsHistory={savingsHistory.get(bucket.id) ?? []}
                       />
                     </div>
                   )}
@@ -630,58 +639,95 @@ export function BudgetSkeleton() {
   )
 }
 
-function BucketBreakdown({ bucket, row, month, groupName }: {
+function SavingsBucketActivity({ bucket, month, balance, netFunding, withdrawals }: {
+  bucket: Bucket
+  month: string
+  balance: number
+  netFunding: number
+  withdrawals: number
+}) {
+  const goal = projectSavingsGoal(bucket, balance, month)
+  const monthlyTarget = bucket.monthlyTargetCents
+  const progress = goal.progressPercent ?? (monthlyTarget > 0 ? netFunding / monthlyTarget * 100 : null)
+  const amountStatus = goal.remainingCents === null
+    ? bucket.targetDate
+      ? goal.targetDatePassed
+        ? `Target date passed · saved balance ${formatCents(balance)}`
+        : `Projected ${formatCents(goal.projectedBalanceAtTargetCents ?? balance)} by ${dateLabel(bucket.targetDate)}`
+      : `Saved balance ${formatCents(balance)}`
+    : goal.remainingCents === 0
+      ? `Goal reached · saved ${formatCents(balance)} of ${formatCents(bucket.targetCents ?? 0)}`
+      : goal.targetDatePassed
+        ? `${formatCents(goal.remainingCents)} remaining · target date passed`
+        : goal.requiredMonthlyCents !== null
+          ? `${formatCents(goal.remainingCents)} remaining · ${formatCents(goal.requiredMonthlyCents)}/mo needed`
+          : goal.estimatedCompletionMonth
+            ? `At ${formatCents(monthlyTarget)}/mo · estimated ${monthLabel(goal.estimatedCompletionMonth)}`
+            : `${formatCents(goal.remainingCents)} left to save`
+
+  return (
+    <div title={`Saved balance ${formatCents(balance)} · Assigned or moved in this month ${formatCents(netFunding)} · Withdrawals this month ${formatCents(withdrawals)}`}>
+      <p className="truncate text-[11px] leading-4 tabular-nums"><span className="text-muted-foreground">Saved </span>{formatCents(balance)}<span className="text-muted-foreground"> · Added this month </span>{formatCents(netFunding)}</p>
+      {progress !== null && <ProgressBar pct={progress} color={bucketColor(bucket)} />}
+      <p className="truncate text-[10px] text-muted-foreground">{amountStatus}</p>
+    </div>
+  )
+}
+
+function BucketBreakdown({ bucket, row, month, groupName, savingsHistory }: {
   bucket: Bucket
   row: BucketMonth
   month: string
   groupName: string
+  savingsHistory: { label: string; value: number }[]
 }) {
   const netFunding = row.allocatedCents + row.movedInCents - row.movedOutCents
-  const hasGoal = bucket.targetCents !== null && bucket.targetCents > 0
-  const goalProgress = hasGoal ? row.availableCents / bucket.targetCents! * 100 : 0
-  const goalRemaining = hasGoal ? bucket.targetCents! - row.availableCents : 0
-  const selectedMonthIndex = monthIndex(month)
-  const targetMonthIndex = bucket.targetDate ? monthIndex(bucket.targetDate.slice(0, 7)) : selectedMonthIndex
-  const futureDeposits = Math.max(0, targetMonthIndex - selectedMonthIndex)
-  const projectedAtTarget = row.availableCents + futureDeposits * bucket.monthlyTargetCents
-  const targetDatePassed = Boolean(bucket.targetDate && targetMonthIndex < selectedMonthIndex)
-
+  const goal = projectSavingsGoal(bucket, row.availableCents, month)
+  const hasGoal = goal.remainingCents !== null
   const expenseBucket = isExpenseBucket(bucket)
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <h3 className="font-semibold">{bucket.name}: month calculation</h3>
+          <h3 className="font-semibold">{bucket.name}: {expenseBucket ? 'month calculation' : 'savings progress'}</h3>
           <p className="text-sm text-muted-foreground">{groupName} · {BUCKET_KIND_LABELS[bucket.kind]} · {monthLabel(month)}</p>
         </div>
-        <p className="text-xs text-muted">Net funded includes assignments and bucket moves.</p>
+        <p className="text-xs text-muted">{expenseBucket ? 'Net funded includes assignments and bucket moves.' : 'Saved balance includes carryover, assignments, and net bucket moves, less withdrawals.'}</p>
       </div>
 
       <dl className="grid gap-2 sm:grid-cols-2 xl:grid-cols-5">
-        <BreakdownValue label={expenseBucket ? 'Planned' : 'Monthly contribution target'} cents={expenseBucket ? row.plannedCents : bucket.monthlyTargetCents} />
-        <BreakdownValue label="Spent" cents={row.spentCents} />
         {expenseBucket ? <>
+          <BreakdownValue label="Planned" cents={row.plannedCents} />
+          <BreakdownValue label="Spent" cents={row.spentCents} />
           <BreakdownValue label="Covered" cents={row.coveredCents} />
           <BreakdownValue label="Uncovered" cents={row.uncoveredCents} />
           <BreakdownValue label={row.varianceCents < 0 ? 'Over plan' : 'Under plan'} cents={Math.abs(row.varianceCents)} />
-        </> : <BreakdownValue label="Assigned this month" cents={netFunding} />}
-        <BreakdownValue label="Carryover" cents={row.carryoverCents} />
-        <BreakdownValue label="Assigned" cents={row.allocatedCents} />
-        <BreakdownValue label="Moved in" cents={row.movedInCents} />
-        <BreakdownValue label="Moved out" cents={row.movedOutCents} />
-        <BreakdownValue label="Spent" cents={row.spentCents} />
-        <BreakdownValue label="Available at month end" cents={row.availableCents} strong />
+          <BreakdownValue label="Carryover" cents={row.carryoverCents} />
+          <BreakdownValue label="Assigned" cents={row.allocatedCents} />
+          <BreakdownValue label="Moved in" cents={row.movedInCents} />
+          <BreakdownValue label="Moved out" cents={row.movedOutCents} />
+          <BreakdownValue label="Available at month end" cents={row.availableCents} strong />
+        </> : <>
+          {hasGoal && <BreakdownValue label="Savings goal" cents={bucket.targetCents ?? 0} />}
+          <BreakdownValue label="Saved balance" cents={row.availableCents} strong />
+          <BreakdownValue label="Assigned or moved in" cents={netFunding} />
+          <BreakdownValue label="Withdrawals" cents={row.spentCents} />
+          <BreakdownValue label="Balance at month start" cents={row.carryoverCents} />
+          <BreakdownValue label="Monthly contribution target" cents={bucket.monthlyTargetCents} />
+          <BreakdownValue label="Moved in" cents={row.movedInCents} />
+          <BreakdownValue label="Moved out" cents={row.movedOutCents} />
+        </>}
       </dl>
 
       <p className="rounded-lg border border-foreground/20 bg-surface px-3 py-2 text-sm text-muted-foreground">
-        {formatCents(row.carryoverCents)} carryover + {formatCents(row.allocatedCents)} assigned + {formatCents(row.movedInCents)} moved in − {formatCents(row.movedOutCents)} moved out − {formatCents(row.spentCents)} spent = <strong className="text-ink">{formatCents(row.availableCents)}</strong> available.
+        {formatCents(row.carryoverCents)} carryover + {formatCents(row.allocatedCents)} assigned + {formatCents(row.movedInCents)} moved in − {formatCents(row.movedOutCents)} moved out − {formatCents(row.spentCents)} {expenseBucket ? 'spent' : 'withdrawn'} = <strong className="text-ink">{formatCents(row.availableCents)}</strong> {expenseBucket ? 'available' : 'saved'}.
       </p>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-xl border border-foreground/20 bg-surface p-3">
           <div className="flex items-start justify-between gap-3">
-            <div><p className="text-xs font-medium text-muted">{expenseBucket ? 'Planned spending' : 'Monthly contribution target'}</p><p className="mt-1 text-lg font-semibold tabular-nums">{formatCents(bucket.monthlyTargetCents)}</p></div>
-            <div className="text-right"><p className="text-xs text-muted">{expenseBucket ? 'Actual spending' : 'Assigned this month'}</p><p className="mt-1 text-sm font-semibold tabular-nums">{formatCents(expenseBucket ? row.spentCents : netFunding)}</p></div>
+            <div><p className="text-xs font-medium text-muted">{expenseBucket ? 'Planned spending' : 'Saved balance'}</p><p className="mt-1 text-lg font-semibold tabular-nums">{formatCents(expenseBucket ? bucket.monthlyTargetCents : row.availableCents)}</p></div>
+            <div className="text-right"><p className="text-xs text-muted">{expenseBucket ? 'Actual spending' : 'Added this month'}</p><p className="mt-1 text-sm font-semibold tabular-nums">{formatCents(expenseBucket ? row.spentCents : netFunding)}</p></div>
           </div>
           {expenseBucket ? <>
             <ProgressBar pct={row.spentCents > 0 ? row.coveredCents / row.spentCents * 100 : 0} over={row.uncoveredCents > 0} color={bucketColor(bucket)} />
@@ -690,8 +736,8 @@ function BucketBreakdown({ bucket, row, month, groupName }: {
             </p>
           </> : bucket.monthlyTargetCents > 0 ? <>
             <ProgressBar pct={netFunding / bucket.monthlyTargetCents * 100} over={netFunding > bucket.monthlyTargetCents} color={bucketColor(bucket)} />
-            <p className="mt-1 text-xs text-muted">{netFunding > bucket.monthlyTargetCents ? `${formatCents(netFunding - bucket.monthlyTargetCents)} above target` : netFunding === bucket.monthlyTargetCents ? 'Contribution target met' : `${formatCents(bucket.monthlyTargetCents - netFunding)} left to assign`}</p>
-          </> : <p className="mt-2 text-xs text-muted">Set a monthly contribution target for this savings goal.</p>}
+            <p className="mt-1 text-xs text-muted">{netFunding > bucket.monthlyTargetCents ? `${formatCents(netFunding - bucket.monthlyTargetCents)} above the monthly contribution target` : netFunding === bucket.monthlyTargetCents ? 'Monthly contribution target met' : `${formatCents(bucket.monthlyTargetCents - netFunding)} left to assign this month`}</p>
+          </> : <p className="mt-2 text-xs text-muted">{goal.targetDatePassed ? `The target date has passed. ${formatCents(goal.remainingCents ?? 0)} remains to save.` : goal.requiredMonthlyCents === null ? 'Set a target date to calculate a monthly savings pace.' : `${formatCents(goal.requiredMonthlyCents)} per month is needed to reach the goal by ${dateLabel(bucket.targetDate!)}`}.</p>}
         </div>
 
         {hasGoal ? <div className="rounded-xl border border-foreground/20 bg-surface p-3">
@@ -699,23 +745,29 @@ function BucketBreakdown({ bucket, row, month, groupName }: {
             <div><p className="text-xs font-medium text-muted">Goal balance</p><p className="mt-1 text-lg font-semibold tabular-nums">{formatCents(row.availableCents)} <span className="text-sm font-normal text-muted">of {formatCents(bucket.targetCents!)}</span></p></div>
             {bucket.targetDate && <div className="text-right"><p className="text-xs text-muted">Target date</p><p className="mt-1 text-sm font-medium">{dateLabel(bucket.targetDate)}</p></div>}
           </div>
-          <ProgressBar pct={goalProgress} over={goalProgress > 100} color={bucketColor(bucket)} />
+          <ProgressBar pct={goal.progressPercent ?? 0} color={bucketColor(bucket)} />
           <p className="mt-1 text-xs text-muted">
-            {goalRemaining > 0 ? `${Math.round(goalProgress)}% funded · ${formatCents(goalRemaining)} remaining`
-              : goalRemaining === 0 ? 'Goal reached'
-                : `${Math.round(goalProgress)}% funded · ${formatCents(-goalRemaining)} above goal`}
+            {goal.remainingCents === 0 ? 'Goal reached' : `${Math.floor(goal.progressPercent ?? 0)}% saved · ${formatCents(goal.remainingCents ?? 0)} remaining`}
           </p>
-        </div> : bucket.kind === 'save_until_date' && bucket.targetDate ? <div className="rounded-xl border border-foreground/20 bg-surface p-3">
-          <p className="text-xs font-medium text-muted">{targetDatePassed ? 'Available this month' : 'Projected at target date'}</p>
-          <p className="mt-1 text-lg font-semibold tabular-nums">{formatCents(targetDatePassed ? row.availableCents : projectedAtTarget)}</p>
-          {targetDatePassed
-            ? <p className="mt-1 text-xs text-muted">Target date was {dateLabel(bucket.targetDate)}.</p>
-            : <p className="mt-1 text-xs text-muted">Assuming no spending or withdrawals: {formatCents(bucket.monthlyTargetCents)} per month for {futureDeposits} future {futureDeposits === 1 ? 'deposit' : 'deposits'} through {dateLabel(bucket.targetDate)}.</p>}
+        </div> : bucket.targetDate ? <div className="rounded-xl border border-foreground/20 bg-surface p-3">
+          <p className="text-xs font-medium text-muted">{goal.targetDatePassed ? 'Target date passed' : 'Projected saved balance at target date'}</p>
+          <p className="mt-1 text-lg font-semibold tabular-nums">{formatCents(goal.targetDatePassed ? row.availableCents : goal.projectedBalanceAtTargetCents ?? row.availableCents)}</p>
+          {goal.targetDatePassed
+            ? <p className="mt-1 text-xs text-muted">Current saved balance as of {monthLabel(month)}. Target date was {dateLabel(bucket.targetDate)}.</p>
+            : <p className="mt-1 text-xs text-muted">Based on {formatCents(bucket.monthlyTargetCents)} monthly from after {monthLabel(month)} through {dateLabel(bucket.targetDate)} ({Math.max(0, (goal.monthsThroughTarget ?? 1) - 1)} future deposits).</p>}
         </div> : <div className="rounded-xl border border-dashed border-foreground/20 p-3">
-          <p className="text-xs font-medium text-muted">No balance goal set</p>
-          <p className="mt-1 text-xs text-muted">This bucket keeps its available balance until you move or spend it.</p>
+          <p className="text-xs font-medium text-muted">{goal.estimatedCompletionMonth ? `Estimated goal date · ${monthLabel(goal.estimatedCompletionMonth)}` : 'No target date set'}</p>
+          <p className="mt-1 text-xs text-muted">{goal.remainingCents === 0 ? 'This savings goal is funded.' : goal.estimatedCompletionMonth ? `At ${formatCents(bucket.monthlyTargetCents)} each month, you could reach ${formatCents(bucket.targetCents ?? 0)} around ${monthLabel(goal.estimatedCompletionMonth)}.` : 'This bucket keeps its saved balance until you move or withdraw it.'}</p>
         </div>}
       </div>
+      {!expenseBucket && <AreaLineGraph
+        title="Saved balance over time"
+        subtitle="Month-end balance for the last 12 months"
+        data={savingsHistory}
+        strokeColor={bucketColor(bucket)}
+        gradientStart={`color-mix(in srgb, ${bucketColor(bucket)} 26%, transparent)`}
+        gradientStop="transparent"
+      />}
     </div>
   )
 }
@@ -725,11 +777,6 @@ function BreakdownValue({ label, cents, strong = false }: { label: string; cents
     <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
     <dd className={`mt-1 text-sm tabular-nums ${strong ? 'font-semibold' : 'font-medium'}`}><Money cents={cents} /></dd>
   </div>
-}
-
-function monthIndex(month: string) {
-  const [year, monthNumber] = month.split('-').map(Number)
-  return year * 12 + monthNumber - 1
 }
 
 function Figure({ label, cents, big = false, accent = false, tone }: {
