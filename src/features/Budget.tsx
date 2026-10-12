@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { DragEvent } from 'react'
 import { ArrowDown, ArrowUp, Check, ChevronDown, CircleDollarSign, GripVertical, Plus, ReceiptText, Users } from 'lucide-react'
-import { AreaLineGraph, Button, Card, List, Modal, ProgressBar, Skeleton, Tile, TileBoard } from '../components'
+import { AreaLineGraph, Button, Card, Input, List, Modal, ProgressBar, Skeleton, Tile, TileBoard } from '../components'
 import type { ListItemData } from '../components'
 import Money from '../app/components/Money'
 import { computeBalances } from '../domain/balances'
@@ -821,7 +821,7 @@ function InOutCell({ name, onSubmit }: { name: string; onSubmit: (cents: number)
   return (
     <div className="min-w-0">
       <div className="flex items-center gap-1">
-        <input
+        <Input
           aria-label={`Put in or take out of ${name}`}
           title="Enter a positive amount to assign, or a negative amount to return to available money."
           className="min-h-10 min-w-0 flex-1 rounded-md border border-foreground/20 bg-surface px-2 py-2 text-right text-sm tabular-nums outline-none placeholder:text-muted focus:border-accent focus:ring-2 focus:ring-accent/25 2xl:min-h-0 2xl:py-1"
@@ -873,7 +873,7 @@ function WantCell({ bucket }: { bucket: Bucket }) {
     <div className="min-w-0">
       <div className={`flex min-h-10 min-w-0 items-center justify-end gap-0.5 rounded-md border bg-surface px-1.5 py-0.5 transition-colors hover:border-muted focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/25 2xl:min-h-0 ${error ? 'border-bad/60' : 'border-foreground/20'}`}>
         <span className="text-xs text-muted" aria-hidden>$</span>
-        <input
+        <Input
           aria-label={`${isExpenseBucket(bucket) ? 'Planned monthly spending' : 'Monthly contribution target'} for ${bucket.name}`}
           aria-invalid={Boolean(error)}
           title="Edit the monthly plan or contribution target. Press Enter or leave the field to save."

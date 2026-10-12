@@ -1,7 +1,7 @@
 {
   "name": "buckets-app",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Personal finance and envelope budgeting app",
   "type": "module",
   "main": "desktop/main.cjs",
@@ -71,7 +71,14 @@
       "target": [
         "nsis"
       ],
-      "artifactName": "Buckets-Setup.${ext}"
+      "artifactName": "Buckets-Setup.${ext}",
+      "publish": [
+        {
+          "provider": "github",
+          "owner": "pranavbalu1",
+          "repo": "buckets-app"
+        }
+      ]
     },
     "mac": {
       "target": [
@@ -83,5 +90,8 @@
         "AppImage"
       ]
     }
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.10"
   }
 }

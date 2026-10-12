@@ -25,6 +25,7 @@ import type { CommandItem } from './components'
 import { PageSkeleton } from './app/components/PageSkeleton'
 import type { SkeletonPage } from './app/components/PageSkeleton'
 import Sidebar from './app/components/Sidebar'
+import DesktopUpdatePrompt from './app/components/DesktopUpdatePrompt'
 import Budget, { BudgetSkeleton } from './features/Budget'
 import { queryClient } from './lib/queryClient'
 import { applyTheme, readThemePreference, saveThemePreference } from './lib/theme'
@@ -139,46 +140,52 @@ export default function App() {
   }, [authReady, userId, ledgerQuery.isPending, ledgerQuery.error, ledgerQuery.data, reset])
 
   if (!authReady && hasSupabaseConfig) return (
-    <PageSkeleton page="Login" fullPage />
+    <>
+      <PageSkeleton page="Login" fullPage />
+      <DesktopUpdatePrompt />
+    </>
   )
 
   return (
-    <Routes>
-      <Route path="/download" element={<AsyncRoute page="Settings"><DownloadDesktop /></AsyncRoute>} />
-      {/* Diagnostics have no workflow link; in production the route is disabled. */}
-      <Route
-        path="/devtools"
-        element={<AsyncRoute page="DevTools">
-          {import.meta.env.DEV
-            ? <DevTools userId={session?.user.id} email={session?.user.email} />
-            : <Navigate to={session ? '/dashboard' : '/'} replace />}
-        </AsyncRoute>}
-      />
-      {session ? (
-        <Route element={
-          <WorkspaceLayout
-            session={session}
-            theme={theme}
-            onThemeChange={setTheme}
-            status={status}
-            error={error}
-            onClearError={() => useLedger.getState().clearError()}
-            onRetry={() => void ledgerQuery.refetch()}
-          />
-        }>
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<AsyncRoute page="Dashboard"><DashboardRoute /></AsyncRoute>} />
-          <Route path="budget" element={<Budget />} />
-          <Route path="transactions" element={<AsyncRoute page="Transactions"><Transactions /></AsyncRoute>} />
-          <Route path="accounts" element={<AsyncRoute page="Accounts"><Accounts /></AsyncRoute>} />
-          <Route path="analytics" element={<AsyncRoute page="Analytics"><Analytics /></AsyncRoute>} />
-          <Route path="settings" element={<AsyncRoute page="Settings"><SettingsRoute /></AsyncRoute>} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Route>
-      ) : (
-        <Route path="*" element={<AsyncRoute page="Login"><Login key={authError} initialError={authError} /></AsyncRoute>} />
-      )}
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/download" element={<AsyncRoute page="Settings"><DownloadDesktop /></AsyncRoute>} />
+        {/* Diagnostics have no workflow link; in production the route is disabled. */}
+        <Route
+          path="/devtools"
+          element={<AsyncRoute page="DevTools">
+            {import.meta.env.DEV
+              ? <DevTools userId={session?.user.id} email={session?.user.email} />
+              : <Navigate to={session ? '/dashboard' : '/'} replace />}
+          </AsyncRoute>}
+        />
+        {session ? (
+          <Route element={
+            <WorkspaceLayout
+              session={session}
+              theme={theme}
+              onThemeChange={setTheme}
+              status={status}
+              error={error}
+              onClearError={() => useLedger.getState().clearError()}
+              onRetry={() => void ledgerQuery.refetch()}
+            />
+          }>
+            <Route index element={<Navigate to="/dashboard" replace />} />
+            <Route path="dashboard" element={<AsyncRoute page="Dashboard"><DashboardRoute /></AsyncRoute>} />
+            <Route path="budget" element={<Budget />} />
+            <Route path="transactions" element={<AsyncRoute page="Transactions"><Transactions /></AsyncRoute>} />
+            <Route path="accounts" element={<AsyncRoute page="Accounts"><Accounts /></AsyncRoute>} />
+            <Route path="analytics" element={<AsyncRoute page="Analytics"><Analytics /></AsyncRoute>} />
+            <Route path="settings" element={<AsyncRoute page="Settings"><SettingsRoute /></AsyncRoute>} />
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Route>
+        ) : (
+          <Route path="*" element={<AsyncRoute page="Login"><Login key={authError} initialError={authError} /></AsyncRoute>} />
+        )}
+      </Routes>
+      <DesktopUpdatePrompt />
+    </>
   )
 }
 

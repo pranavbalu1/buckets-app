@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import QuickAdd from './QuickAdd'
 import { Button, Card, FormField, Input, Modal, Select, Tile, TileBoard } from '../components'
-import { formatCents, parseDollars } from '../domain/money'
+import { formatCents, parseBalanceDollars } from '../domain/money'
 import { TYPE_LABELS } from '../domain/describe'
 import { computeBalances } from '../domain/balances'
 import { makeEvent } from '../domain/events'
@@ -84,15 +84,13 @@ export default function Accounts() {
       return
     }
     const rawBalance = startingBalance.trim()
-    const negative = rawBalance.startsWith('-')
-    const unsignedBalance = rawBalance.replace(/^[+-]/, '')
-    const parsedBalance = rawBalance ? parseDollars(unsignedBalance) : 0
+    const parsedBalance = rawBalance ? parseBalanceDollars(rawBalance) : 0
     if (parsedBalance === null) {
       setFormError('Enter a valid balance, like 1250.00 or -1250.00.')
       return
     }
 
-    const openingBalanceCents = negative ? -parsedBalance : parsedBalance
+    const openingBalanceCents = parsedBalance
     const validated = accountInputSchema.safeParse({ name: trimmed, type, openingBalanceCents })
     if (!validated.success) {
       setFormError(firstIssueMessage(validated.error, 'Enter valid account details.'))

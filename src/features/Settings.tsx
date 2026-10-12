@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ArchiveRestore, CalendarClock, Check, CircleDollarSign, Download, FileUp, Palette, Plus, WalletCards } from 'lucide-react'
+import { ArchiveRestore, CalendarClock, Check, CircleDollarSign, Download, FileUp, Palette, Plus, RefreshCw, WalletCards } from 'lucide-react'
 import { Button, Card, FormField, Input, Modal, Select, Tile, TileBoard } from '../components'
 import { computeBalances } from '../domain/balances'
 import { makeEvent } from '../domain/events'
 import { todayString } from '../domain/dates'
-import { formatCents, parseDollars } from '../domain/money'
+import { formatCents, parseBalanceDollars, parseDollars } from '../domain/money'
 import { maxAllocatable } from '../domain/budget'
 import { queryClient } from '../lib/queryClient'
 import { supabase } from '../lib/supabase'
@@ -13,6 +13,7 @@ import { useLedger } from '../storage/store'
 import { supabaseRepository } from '../storage/supabaseRepository'
 import { downloadBackup, parseBackup } from '../storage/backup'
 import type { ThemePreference } from '../lib/theme'
+import { checkForDesktopUpdates, hasDesktopUpdateBridge, useDesktopUpdates } from '../lib/desktopUpdates'
 import { z } from 'zod'
 import {
   dateSchema,
@@ -78,12 +79,7 @@ function fail(error: { message: string } | null) {
 }
 
 function readBalance(text: string): number | null {
-  const cleaned = text.trim()
-  const negative = cleaned.startsWith('-')
-  const positive = cleaned.startsWith('+')
-  const cents = parseDollars(cleaned.replace(/^[+-]/, ''))
-  if (cents === null) return null
-  return negative ? -cents : positive ? cents : cents
+  return text.trim() ? parseBalanceDollars(text) : null
 }
 
 export default function Settings({ userId, theme, onThemeChange }: {
@@ -124,6 +120,8 @@ export default function Settings({ userId, theme, onThemeChange }: {
   const [reconcileDate, setReconcileDate] = useState(today)
   const [statementBalance, setStatementBalance] = useState('')
   const [postAdjustment, setPostAdjustment] = useState(true)
+  const desktopUpdate = useDesktopUpdates()
+  const [desktopUpdateActionError, setDesktopUpdateActionError] = useState('')
 
   const planningQuery = useQuery<PlanningData>({
     queryKey: ['planning-settings', userId],
@@ -159,6 +157,21 @@ export default function Settings({ userId, theme, onThemeChange }: {
   }, [ledger.events, reconcileAccount, reconcileDate])
   const parsedStatement = readBalance(statementBalance)
   const difference = parsedStatement === null ? null : parsedStatement - selectedAccountBalance
+
+  async function checkDesktopUpdate() {
+    setDesktopUpdateActionError('')
+    const result = await checkForDesktopUpdates()
+    if (!result.ok) setDesktopUpdateActionError(result.message ?? 'Could not check for updates.')
+  }
+
+  const desktopUpdateStatus = desktopUpdate.status === 'checking' ? 'Checking for updates…'
+    : desktopUpdate.status === 'available' ? `Version ${desktopUpdate.version} is available to download.`
+      : desktopUpdate.status === 'downloading' ? `Downloading version ${desktopUpdate.version}… ${Math.round(desktopUpdate.percent)}%`
+        : desktopUpdate.status === 'downloaded' ? `Version ${desktopUpdate.version} is downloaded and ready to install.`
+          : desktopUpdate.status === 'error' ? desktopUpdate.message ?? 'Could not check for updates.'
+            : desktopUpdate.status === 'not-available' ? `You're up to date${desktopUpdate.currentVersion ? ` (version ${desktopUpdate.currentVersion})` : ''}.`
+              : desktopUpdate.supported ? `Installed version ${desktopUpdate.currentVersion}.`
+                : 'Update checks work in the installed Windows desktop app.'
 
   async function refreshPlanning() {
     await queryClient.invalidateQueries({ queryKey: ['planning-settings'] })
@@ -387,6 +400,24 @@ export default function Settings({ userId, theme, onThemeChange }: {
         </div>
       </Card>
       </Tile>
+
+      {hasDesktopUpdateBridge() && <Tile id="desktop-updates" label="Desktop app updates" className="col-span-full">
+      <Card className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div className="flex items-start gap-3">
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary"><RefreshCw className="size-4" /></span>
+          <div>
+            <h2 className="font-semibold">Desktop app updates</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Check for a newer Buckets release and download it here. Restart the app to complete installation.</p>
+            <p role={desktopUpdate.status === 'error' || desktopUpdateActionError ? 'alert' : 'status'} className={`mt-2 text-xs ${desktopUpdate.status === 'error' || desktopUpdateActionError ? 'text-bad' : 'text-muted'}`}>
+              {desktopUpdateActionError || desktopUpdateStatus}
+            </p>
+          </div>
+        </div>
+        <Button variant="secondary" disabled={!desktopUpdate.supported || desktopUpdate.status === 'checking' || desktopUpdate.status === 'downloading'} onClick={() => void checkDesktopUpdate()}>
+          <RefreshCw className="size-4" /> Check for updates
+        </Button>
+      </Card>
+      </Tile>}
 
       <Tile id="backups" label="Data and backups" className="col-span-full">
       <Card className="p-5 sm:p-6">

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Field, Modal } from '../components'
+import { Field, Input, Modal } from '../components'
 import { centsToInput, parseDollars } from '../domain/money'
 import {
   BUCKET_COLORS,
@@ -152,7 +152,7 @@ function GroupForm({ group, onClose }: { group?: BucketGroup; onClose: () => voi
 }
 
 function MoneyField({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
-  return <Field label={label}><input className="input" inputMode="decimal" placeholder="0.00" value={value} onChange={(e) => onChange(e.target.value)} /></Field>
+  return <Field label={label}><Input inputMode="decimal" placeholder="0.00" value={value} onChange={(e) => onChange(e.target.value)} /></Field>
 }
 function DateField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
   return <Field label="Target date"><input className="input" type="date" value={value} onChange={(e) => onChange(e.target.value)} /></Field>
