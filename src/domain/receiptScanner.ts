@@ -32,7 +32,7 @@ export interface ReceiptBucketSuggestion {
   reasons: string[]
 }
 
-export type ReceiptClassificationMode = 'personalized' | 'naive-bayes' | 'receipt-keywords'
+export type ReceiptClassificationMode = 'personalized' | 'naive-bayes' | 'receipt-keywords' | 'semantic-model'
 
 const amountPattern = /(?:\$\s*)?((?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d{2})?)/g
 const labelledTotal = /\b(grand\s+total|total\s+due|amount\s+due|balance\s+due|total|amount\s+paid|paid)\b/i

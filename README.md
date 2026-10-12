@@ -13,6 +13,11 @@ questions:
 Balances and reports are calculated from the ledger. The app does not connect to
 your bank and does not import transactions automatically.
 
+## Run targets
+
+- Web: `npm run dev`
+- Desktop: see [DESKTOP.md](DESKTOP.md)
+
 ## Quick start
 
 ### 1. Sign in

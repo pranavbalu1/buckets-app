@@ -40,6 +40,7 @@ const QuickAdd = lazy(() => import('./features/QuickAdd'))
 const Analytics = lazy(() => import('./features/Analytics'))
 const Settings = lazy(() => import('./features/Settings'))
 const DevTools = lazy(() => import('./features/DevTools'))
+const DownloadDesktop = lazy(() => import('./features/DownloadDesktop'))
 
 const tabPaths: Record<Tab, string> = {
   Dashboard: '/dashboard',
@@ -143,6 +144,7 @@ export default function App() {
 
   return (
     <Routes>
+      <Route path="/download" element={<AsyncRoute page="Settings"><DownloadDesktop /></AsyncRoute>} />
       {/* Diagnostics have no workflow link; in production the route is disabled. */}
       <Route
         path="/devtools"

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ArrowUpRight, Check, Layers3, LockKeyhole } from 'lucide-react'
+import { Link } from 'react-router'
 import { Button, Card, FormField, Input, SegmentedControl } from '../components'
 import BrandMark from '../app/components/BrandMark'
 import { z } from 'zod'
@@ -182,6 +183,7 @@ export default function Login({ initialError = '' }: { initialError?: string }) 
               </Button>
             </form>
             <p className="mt-6 text-center text-xs leading-5 text-muted">Your budget is personal. Keep your sign-in details private.</p>
+            <p className="mt-3 text-center text-xs text-muted">Prefer desktop? <Link to="/download" className="font-medium text-accent hover:underline">Download the app</Link></p>
           </Card>
         </section>
       </div>

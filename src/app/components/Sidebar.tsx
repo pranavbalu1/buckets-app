@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   ArrowLeftRight,
   BarChart3,
+  Download,
   Settings2,
   LayoutDashboard,
   LogOut,
@@ -13,6 +14,7 @@ import {
   WalletCards,
 } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { Link } from 'react-router'
 import { computeBalances } from '../../domain/balances'
 import { formatCents } from '../../domain/money'
 import { Card } from '../../components'
@@ -202,6 +204,9 @@ export default function Sidebar({
 
       <div className="hidden border-t border-line p-4 md:block">
         <ProfileCard name={userName} email={userEmail} />
+        <Link to="/download" className="mt-2 flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-sunken hover:text-ink">
+          <Download className="size-4" /> Download desktop app
+        </Link>
         <button className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-muted transition hover:bg-sunken hover:text-ink" onClick={onLogout}>
           <LogOut className="size-4" /> Sign out
         </button>
@@ -231,6 +236,9 @@ export default function Sidebar({
               <Icon className="size-4 text-muted" /> {item}
             </button>
           })}
+          <Link to="/download" onClick={() => setMoreOpen(false)} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium text-ink hover:bg-sunken">
+            <Download className="size-4 text-muted" /> Download desktop app
+          </Link>
           <div className="my-1 border-t border-line" />
           <button type="button" onClick={() => { setMoreOpen(false); onOpenCommandMenu() }} className="flex min-h-12 w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-medium text-ink hover:bg-sunken">
             <Search className="size-4 text-muted" /> Search pages and actions
