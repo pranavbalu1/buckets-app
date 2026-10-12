@@ -43,12 +43,18 @@ export interface Bucket {
   color: string | null
 }
 
-/** Savings and future-goal buckets use explicit funding rules, not expense coverage. */
+/**
+ * Savings and future-goal buckets use explicit funding rules, not expense
+ * coverage. This distinction controls which budget calculations apply.
+ */
 export function isSavingsBucket(bucket: Pick<Bucket, 'kind'>): boolean {
   return bucket.kind === 'savings' || bucket.kind.startsWith('save_')
 }
 
-/** Plain and recurring buckets represent planned expenses, including legacy expense kinds. */
+/**
+ * Plain and recurring buckets represent planned expenses, including legacy
+ * expense kinds. Legacy values remain readable for existing user data.
+ */
 export function isExpenseBucket(bucket: Pick<Bucket, 'kind'>): boolean {
   return !isSavingsBucket(bucket)
 }

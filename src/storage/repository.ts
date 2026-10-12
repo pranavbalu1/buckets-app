@@ -10,6 +10,7 @@ export interface LedgerData {
   events: LedgerEvent[]
 }
 
+/** Input shape used when creating or restoring a bucket. Monetary values are cents. */
 export interface BucketInput {
   id?: string
   name: string
@@ -26,6 +27,13 @@ export type BucketPatch = Partial<
   Pick<Bucket, 'name' | 'kind' | 'groupId' | 'archived' | 'sortOrder' | 'monthlyTargetCents' | 'targetCents' | 'targetDate' | 'color'>
 >
 
+/**
+ * Persistence boundary for the local state store.
+ *
+ * Implementations must preserve the repository contract: mutations either
+ * complete or reject, and user-owned records must remain scoped to the active
+ * authenticated user.
+ */
 export interface LedgerRepository {
   loadAll(): Promise<LedgerData>
   exportAll(): Promise<AppBackup>
