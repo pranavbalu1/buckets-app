@@ -5,6 +5,7 @@ const MAX_NESTING = 32
 export function evaluateMathExpression(input: string): number | null {
   let source = input.trim()
   if (source.startsWith('$')) source = source.slice(1).trimStart()
+  else source = source.replace(/^([+-])\s*\$\s*/, '$1')
   if (!source || source.length > MAX_EXPRESSION_LENGTH) return null
 
   let position = 0
