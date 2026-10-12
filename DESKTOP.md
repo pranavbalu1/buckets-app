@@ -14,15 +14,15 @@ The production installer uses the current Windows machine's architecture. The lo
 
 The installed Windows app checks GitHub Releases on launch and also has a **Check for updates** control in Settings. When a release is available, Buckets asks before downloading it; after download, choose **Restart and install** to apply it. Update checks and downloads run in the desktop main process, not in the web app.
 
-The first updater-enabled desktop build is version `0.2.0`, which is newer than the currently published `v0.1.0` installer. Use tag `v0.2.0` for that first updater release. Users on `v0.1.0` must install it manually once; later versions can be installed through the app.
+Version `0.2.0` is the first updater-enabled desktop release and is now available on GitHub Releases. Users on `v0.1.0` must install `v0.2.0` manually once; later versions can be installed through the app.
 
 To roll out a later desktop fix:
 
 1. Increase the `version` in `package.json` for each release (for example, from `0.2.0` to `0.2.1`).
 2. Build on Windows with `npm run desktop:package:win`.
-3. Create and publish a public GitHub Release tagged `v<version>` (for example, `v0.2.0`). Attach every updater artifact from `release-desktop/`, including `Buckets-Setup.exe`, `latest.yml`, and `Buckets-Setup.exe.blockmap` when generated.
+3. Create and publish a public GitHub Release tagged `v<version>` (for example, `v0.2.1`). Attach every updater artifact from `release-desktop/`, including `Buckets-Setup.exe`, `latest.yml`, and `Buckets-Setup.exe.blockmap` when generated.
 
-The release must be published, not left as a draft, for installed apps to find it. The currently published `v0.1.0` installer predates the updater, so its users must install the first updater-enabled release manually once. Later releases can be downloaded and installed from inside the desktop app. Only the Windows installer currently has an update feed.
+The release must be published, not left as a draft, for installed apps to find it. The `v0.1.0` installer predates the updater, so its users must install `v0.2.0` manually once. Later releases can be downloaded and installed from inside the desktop app. Only the Windows installer currently has an update feed.
 
 ## Receipt scanner
 
